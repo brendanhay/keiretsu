@@ -1,7 +1,7 @@
 module Main (main) where
 
 import Control.Applicative
-import Data.Version                     (showVersion)
+import Data.Version              (showVersion)
 import Keiretsu.Command
 import System.Console.CmdTheLine
 import System.Environment

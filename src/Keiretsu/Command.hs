@@ -12,7 +12,7 @@ import qualified Keiretsu.Dependency as Deps
 import qualified Keiretsu.Process    as Procs
 
 start :: FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> Bool -> IO ()
-start cfg tmp _envs build verify conc = do
+start cfg tmp _envs verify build conc = do
     deps <- Deps.load cfg tmp
 
     let slen = show (length deps) <> " dependencies."

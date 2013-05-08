@@ -10,17 +10,13 @@ import Data.Monoid
 import Data.Text                (Text)
 import Data.Word
 import Network.Socket
-import Keiretsu.Dependency     (Dep(..))
+import Keiretsu.Dependency      (Dep(..))
 import System.FilePath
 import System.Exit
 import System.Process
 
 import qualified Data.Text       as T
 import qualified Keiretsu.Config as Cfg
-
-type Env = [(String, String)]
-
-type Spec = (Text, [Proc])
 
 data Proc = Proc
     { procName :: Text
@@ -30,19 +26,13 @@ data Proc = Proc
     , procPort :: Word16
     } deriving (Eq, Show)
 
+type Spec = (Text, [Proc])
+type Env  = [(String, String)]
+
 load :: [Dep] -> IO ([Spec], Env)
 load deps = do
-    procs <- mapM f deps
+    procs <- mapM loadOne deps
     return (procs, environment $ concatMap snd procs)
-  where
-    f Dep{..} = do
-        putStrLn $ "Loading " <> cfg <> " ..."
-        xs <- Cfg.load mk cfg
-        ys <- findPorts $ length xs
-        return (depName, zipWith ($) xs ys)
-      where
-        cfg = joinPath [depPath, "Procfile"]
-        mk k v = Proc k v depPath (portVar depName k)
 
 start :: Env -> Spec -> IO [Async ExitCode]
 start env (name, procs) = do
@@ -52,10 +42,28 @@ start env (name, procs) = do
 environment :: [Proc] -> Env
 environment = map (\Proc{..} -> (T.unpack procVar, show procPort))
 
+loadOne :: Dep -> IO Spec
+loadOne Dep{..} = do
+    putStrLn $ "Loading " <> cfg <> " ..."
+    xs <- Cfg.load mk cfg
+    ys <- findPorts $ length xs
+    return (depName, zipWith ($) xs ys)
+  where
+    cfg = joinPath [depPath, "Procfile"]
+    mk k v = Proc k v depPath (portVar depName k)
+
 startOne :: Env -> Proc -> IO (Async ExitCode)
-startOne env Proc{..} = async $ do
-    putStrLn $ "Forking " <> T.unpack procName <> " in " <> procDir <> " ..."
-    withEnv (T.unpack procCmd) procDir $ ("PORT", show procPort) : env
+startOne env Proc{..} = do
+    putStrLn . init $ unlines
+        [ "Forking " <> T.unpack procName <> " ..."
+        , " Cmd: " <> cmd
+        , " Dir: " <> procDir
+        , " Env: " <> show env'
+        ]
+    async $ withEnv cmd procDir env'
+  where
+    cmd  = T.unpack procCmd
+    env' = ("PORT", show procPort) : env
 
 portVar :: Text -> Text -> Text
 portVar x y = T.toUpper $ T.intercalate "_" [x, y, "port"]

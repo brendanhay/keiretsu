@@ -5,11 +5,14 @@ import Data.Version              (showVersion)
 import Keiretsu.Command
 import System.Console.CmdTheLine
 import System.Environment
+import System.IO
 
 import qualified Paths_keiretsu as P
 
 main :: IO ()
 main = do
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
     name <- getProgName
     runChoice (defTerm name) [startTerm, cleanTerm]
 

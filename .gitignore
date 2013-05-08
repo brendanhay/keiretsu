@@ -8,6 +8,7 @@ cabal-dev
 # Dirs
 dist
 tmp
+.shelly
 
 # CTAGS
 TAGS
@@ -24,3 +25,7 @@ tags
 
 # OSX
 .DS_Store
+
+# Keiretsu
+Intfile
+Procfile

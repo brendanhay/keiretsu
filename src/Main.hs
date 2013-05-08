@@ -1,7 +1,7 @@
 module Main (main) where
 
 import Control.Applicative
-import Data.Version              (showVersion)
+import Data.Version                     (showVersion)
 import Keiretsu.Command
 import System.Console.CmdTheLine
 import System.Environment
@@ -14,7 +14,7 @@ main = do
     hSetBuffering stdout LineBuffering
     hSetBuffering stderr LineBuffering
     name <- getProgName
-    runChoice (defTerm name) [startTerm, cleanTerm]
+    runChoice (defTerm name) [startTerm, reloadTerm, cleanTerm]
 
 defTerm :: String -> (Term (IO ()), TermInfo)
 defTerm name = (term, info)
@@ -34,18 +34,13 @@ defTerm name = (term, info)
 startTerm :: (Term (IO ()), TermInfo)
 startTerm = (term, info)
   where
-    term = start <$> config <*> tmp <*> env <*> verify <*> build <*> conc
+    term = start <$> config <*> tmp <*> envs <*> verify <*> build <*> conc
     info = (describe
         "Rotate input gathered from INPUT or standard-in N \
         \places.  The input must be composed totally of \
         \alphabetic characters and spaces.")
         { termName = "start"
         , termDoc  = "Update, build, and start dependencies."
-        }
-
-    env = value . optAll ["./.env"] $ (optInfo ["env"])
-        { optDoc = "Foreman style .env files to merge into all individual \
-                   \processes environment.  Can be repeatedly specified."
         }
 
     verify = noFlag ["no-verify"]
@@ -56,6 +51,18 @@ startTerm = (term, info)
 
     conc = noFlag ["no-concurrency"]
         "Don't fork workers for concurrent tasks."
+
+reloadTerm :: (Term (IO ()), TermInfo)
+reloadTerm = (term, info)
+  where
+    term = reload <$> config <*> tmp <*> envs
+    info = (describe
+        "Rotate input gathered from INPUT or standard-in N \
+        \places.  The input must be composed totally of \
+        \alphabetic characters and spaces.")
+        { termName = "reload"
+        , termDoc  = "Run dependencies without verifying or building."
+        }
 
 cleanTerm :: (Term (IO ()), TermInfo)
 cleanTerm = (clean <$> config <*> tmp <*> force, info)
@@ -97,6 +104,12 @@ config :: Term FilePath
 config = value . opt "./Intfile" $ (optInfo ["config"])
     { optDoc = "Configuration file containing dependency specifications."
     , optSec = common
+    }
+
+envs :: Term [FilePath]
+envs = value . optAll ["./.env"] $ (optInfo ["env"])
+    { optDoc = "Foreman style .env files to merge into all individual \
+               \processes environment.  Can be repeatedly specified."
     }
 
 noFlag :: [String] -> String -> Term Bool

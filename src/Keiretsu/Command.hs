@@ -1,5 +1,6 @@
 module Keiretsu.Command (
       start
+    , reload
     , clean
     ) where
 
@@ -39,6 +40,9 @@ start cfg tmp _envs verify build conc = do
     putStrLn "Waiting ..."
     void $ waitAnyCancel asyncs
     -- Trap any exit and run cleanup
+
+reload :: FilePath -> FilePath -> [FilePath] -> IO ()
+reload cfg tmp envs = start cfg tmp envs False False False
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = do

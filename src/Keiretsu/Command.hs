@@ -38,13 +38,6 @@ start cfg tmp _envs build verify conc = do
 
     putStrLn "Waiting ..."
     void $ waitAnyCancel asyncs
-
---    putStrLn "Starting dependencies ..."
-    -- procs    <- mapM startDep deps
-    -- (_, str) <- waitAny $ concat procs
-
-    -- print str
-
     -- Trap any exit and run cleanup
 
 clean :: FilePath -> FilePath -> Bool -> IO ()

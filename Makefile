@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: clean install lint dist
+.PHONY: clean install lint ghci
 
 all: install lint
 

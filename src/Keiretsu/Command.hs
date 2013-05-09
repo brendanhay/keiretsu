@@ -1,50 +1,55 @@
 module Keiretsu.Command (
       start
-    , reload
+    , retry
     , clean
     ) where
 
-import Control.Applicative
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Data.Monoid
 
-import qualified Keiretsu.Dependency as Deps
-import qualified Keiretsu.Process    as Procs
+import qualified Keiretsu.Dependency  as Deps
+import qualified Keiretsu.Environment as Env
+import qualified Keiretsu.Process     as Procs
 
 start :: FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> Bool -> IO ()
-start cfg tmp _envs verify build conc = do
-    deps <- Deps.load cfg tmp
-
+start cfg tmp envs verify build _conc = do
+    putStrLn "[Load]"
+    deps <- Deps.fromFile cfg tmp
     let slen = show (length deps) <> " dependencies."
-        map_ = if conc then mapConcurrently else mapM
-
     putStrLn $ "Loaded " <> slen
 
     when verify $ do
-        putStrLn "Verifying dependencies ..."
-        void $ map_ Deps.verify deps
+        putStrLn "[Verify]"
+        mapM_ Deps.verify deps
         putStrLn $ "Verified " <> slen
 
     when build $ do
-        putStrLn "Building dependencies ..."
+        putStrLn "[Build]"
         mapM_ Deps.build deps
         putStrLn $ "Built " <> slen
 
-    putStrLn "Reading Procfiles ..."
-    (procs, env) <- Procs.load deps
+    putStrLn "[Procfiles]"
+    specs  <- Procs.fromDependencies deps
 
-    putStrLn "Start dependencies ..."
-    asyncs <- concat <$> mapM (Procs.start env) procs
+    putStrLn "[Environments]"
+    env    <- Env.fromFiles envs
+
+    putStrLn "[Processes]"
+    asyncs <- Procs.start env specs
 
     putStrLn "Waiting ..."
+    threadDelay 10000
     void $ waitAnyCancel asyncs
+
     -- Trap any exit and run cleanup
 
-reload :: FilePath -> FilePath -> [FilePath] -> IO ()
-reload cfg tmp envs = start cfg tmp envs False False False
+retry :: FilePath -> FilePath -> [FilePath] -> IO ()
+retry cfg tmp envs = start cfg tmp envs False False False
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = do
-    deps <- Deps.load cfg tmp
+    putStrLn "[Load]"
+    deps <- Deps.fromFile cfg tmp
     mapM_ (if force then Deps.wipe else Deps.clean) deps

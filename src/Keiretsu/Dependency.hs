@@ -1,6 +1,5 @@
 module Keiretsu.Dependency (
-      Dep(..)
-    , load
+      fromFile
     , verify
     , build
     , wipe
@@ -9,29 +8,26 @@ module Keiretsu.Dependency (
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Monoid
-import Data.Text            (Text)
+import Keiretsu.Types
 import System.Directory
 import System.FilePath
 import System.ShQQ
 
-import qualified Data.Text        as T
+import qualified Data.Text       as T
 import qualified Keiretsu.Config as Cfg
 
-data Dep = Dep
-    { depName :: Text
-    , depPath :: FilePath
-    , depUrl  :: String
-    } deriving (Eq, Show)
-
-load :: FilePath -> FilePath -> IO [Dep]
-load cfg tmp = do
+fromFile :: FilePath -> FilePath -> IO [Dep]
+fromFile cfg tmp = do
     putStrLn $ "Loading " <> cfg <> " ..."
-    Cfg.load (\k -> Dep k (joinPath [tmp, T.unpack k]) . T.unpack) cfg
+    liftIO $ Cfg.load f cfg
+  where
+    f k = Dep k (joinPath [tmp, T.unpack k]) . T.unpack
 
 verify :: Dep -> IO ()
 verify d = do
-    p <- doesDirectoryExist $ depPath d
+    p <- liftIO . doesDirectoryExist $ depPath d
     (if p then update else clone) d
 
 build :: Dep -> IO ()
@@ -45,12 +41,12 @@ update d@Dep{..} = do
     if p
      then do
          putStrLn $ "Updating " <> depPath <> " ..."
-         void [sh| cd $depPath && git pull -f $+redirect |]
+         void [sh| cd $depPath && git pull -f |]
      else clone d
 
 origin :: Dep -> IO Bool
 origin Dep{..} = do
-    p <- doesDirectoryExist depPath
+    p <- liftIO $ doesDirectoryExist depPath
     if p
      then eq <$> [sh| cd $depPath && git config --get remote.origin.url |]
      else return False
@@ -75,4 +71,4 @@ clean Dep{..} = do
     void [sh| cd $depPath && make clean |]
 
 redirect :: String
-redirect = "> /dev/null 2>&1"
+redirect = " > /dev/null 2>&1"

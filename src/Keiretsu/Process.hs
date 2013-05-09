@@ -1,66 +1,60 @@
 module Keiretsu.Process (
-      Proc(..)
-    , load
+      fromDependencies
     , start
     ) where
 
 import Control.Applicative
 import Control.Concurrent.Async
+import Control.Monad.IO.Class
+import Data.List
 import Data.Monoid
 import Data.Text                (Text)
 import Data.Word
 import Network.Socket
-import Keiretsu.Dependency      (Dep(..))
+import Keiretsu.Environment
+import Keiretsu.Terminal
+import Keiretsu.Types
 import System.FilePath
 import System.Exit
-import System.Process
 
 import qualified Data.Text       as T
 import qualified Keiretsu.Config as Cfg
 
-data Proc = Proc
-    { procName :: Text
-    , procCmd  :: Text
-    , procDir  :: FilePath
-    , procVar  :: Text
-    , procPort :: Word16
-    } deriving (Eq, Show)
-
-type Spec = (Text, [Proc])
-type Env  = [(String, String)]
-
-load :: [Dep] -> IO ([Spec], Env)
-load deps = do
-    procs <- mapM loadOne deps
-    return (procs, environment $ concatMap snd procs)
-
-start :: Env -> Spec -> IO [Async ExitCode]
-start env (name, procs) = do
-    putStrLn $ "Starting " <> T.unpack name <> " processes ..."
-    mapM (startOne env) procs
-
-environment :: [Proc] -> Env
-environment = map (\Proc{..} -> (T.unpack procVar, show procPort))
-
-loadOne :: Dep -> IO Spec
-loadOne Dep{..} = do
-    putStrLn $ "Loading " <> cfg <> " ..."
-    xs <- Cfg.load mk cfg
-    ys <- findPorts $ length xs
-    return (depName, zipWith ($) xs ys)
+fromDependencies :: [Dep] -> IO [Spec]
+fromDependencies = mapM f
   where
-    cfg = joinPath [depPath, "Procfile"]
-    mk k v = Proc k v depPath (portVar depName k)
+    f Dep{..} = do
+        putStrLn $ "Loading " <> cfg <> " ..."
+        xs <- liftIO $ Cfg.load mk cfg
+        ys <- liftIO . findPorts $ length xs
+        return (depName, zipWith ($) xs ys)
+      where
+        cfg = joinPath [depPath, "Procfile"]
+        mk k v = Proc k v depPath (portVar depName k)
 
-startOne :: Env -> Proc -> IO (Async ExitCode)
-startOne env Proc{..} = do
+start :: Env -> [Spec] -> IO [Async ExitCode]
+start env specs = do
+    logger <- getLogger
+    asyncs <- mapM (startSpec env' logger) specs
+    return $ concat asyncs
+  where
+    env' = nubBy uniq $ fromProcs (concatMap snd specs) ++ env
+    uniq x y = fst x == fst y
+
+startSpec :: Env -> Logger -> Spec -> IO [Async ExitCode]
+startSpec env logger (name, procs) = do
+    putStrLn $ "Starting " <> T.unpack name <> " processes ..."
+    mapM (startProc env logger) procs
+
+startProc :: Env -> Logger -> Proc -> IO (Async ExitCode)
+startProc env logger Proc{..} = do
     putStrLn . init $ unlines
         [ "Forking " <> T.unpack procName <> " ..."
         , " Cmd: " <> cmd
         , " Dir: " <> procDir
         , " Env: " <> show env'
         ]
-    async $ withEnv cmd procDir env'
+    async $ fst <$> shell cmd (Just procDir) env' logger
   where
     cmd  = T.unpack procCmd
     env' = ("PORT", show procPort) : env
@@ -81,11 +75,3 @@ findSocket = do
     addr <- inet_addr "127.0.0.1"
     bind sock $ SockAddrInet aNY_PORT addr
     return sock
-
-withEnv :: String -> FilePath -> [(String, String)] -> IO ExitCode
-withEnv s cwd env = do
-    (_, _, _, pid) <- createProcess $ (shell s)
-        { cwd = Just cwd
-        , env = Just env
-        }
-    waitForProcess pid

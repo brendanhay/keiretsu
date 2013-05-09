@@ -27,5 +27,6 @@ tags
 .DS_Store
 
 # Keiretsu
+.env
 Intfile
 Procfile

@@ -5,16 +5,13 @@ import Data.Version              (showVersion)
 import Keiretsu.Command
 import System.Console.CmdTheLine
 import System.Environment
-import System.IO
 
 import qualified Paths_keiretsu as P
 
 main :: IO ()
 main = do
-    hSetBuffering stdout LineBuffering
-    hSetBuffering stderr LineBuffering
     name <- getProgName
-    runChoice (defTerm name) [startTerm, reloadTerm, cleanTerm]
+    runChoice (defTerm name) [startTerm, retryTerm, cleanTerm]
 
 defTerm :: String -> (Term (IO ()), TermInfo)
 defTerm name = (term, info)
@@ -52,15 +49,15 @@ startTerm = (term, info)
     conc = noFlag ["no-concurrency"]
         "Don't fork workers for concurrent tasks."
 
-reloadTerm :: (Term (IO ()), TermInfo)
-reloadTerm = (term, info)
+retryTerm :: (Term (IO ()), TermInfo)
+retryTerm = (term, info)
   where
-    term = reload <$> config <*> tmp <*> envs
+    term = retry <$> config <*> tmp <*> envs
     info = (describe
         "Rotate input gathered from INPUT or standard-in N \
         \places.  The input must be composed totally of \
         \alphabetic characters and spaces.")
-        { termName = "reload"
+        { termName = "retry"
         , termDoc  = "Run dependencies without verifying or building."
         }
 
@@ -107,9 +104,11 @@ config = value . opt "./Intfile" $ (optInfo ["config"])
     }
 
 envs :: Term [FilePath]
-envs = value . optAll ["./.env"] $ (optInfo ["env"])
+envs = value . optAll [] $ (optInfo ["env"])
     { optDoc = "Foreman style .env files to merge into all individual \
-               \processes environment.  Can be repeatedly specified."
+               \processes environment.  Can be repeatedly specified.  \
+               \If a .env file exists in the working directory, it will \
+               \ be loaded."
     }
 
 noFlag :: [String] -> String -> Term Bool

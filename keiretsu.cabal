@@ -19,10 +19,12 @@ executable keiretsu
                       , cmdtheline
                       , directory
                       , filepath
+                      , mtl
                       , network
                       , process
                       , shqq
                       , text
+                      , transformers
                       , unordered-containers
                       , yaml
 

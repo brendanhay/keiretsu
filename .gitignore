@@ -1,5 +1,6 @@
 # Haskell
 cabal-dev
+.configured
 *.o
 *.hi
 *.chi
@@ -9,6 +10,7 @@ cabal-dev
 dist
 tmp
 .shelly
+vendor
 
 # CTAGS
 TAGS

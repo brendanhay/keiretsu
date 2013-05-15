@@ -2,14 +2,14 @@ SHELL := /usr/bin/env bash
 
 .PHONY: clean install lint ghci
 
-all: build
+all: build lint
 
 clean:
-	@-rm -f .configured
-	@cabal-dev clean
+	-rm -f .configured
+	cabal-dev clean
 
 build: .configured
-	@cabal-dev build
+	cabal-dev build
 
 install:
 	cabal-dev install -j --disable-documentation --disable-library-coverage
@@ -21,5 +21,5 @@ ghci:
 	cabal-dev ghci
 
 .configured:
-	@cabal-dev configure
-	@touch .configured
+	cabal-dev configure
+	touch .configured

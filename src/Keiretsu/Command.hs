@@ -15,7 +15,7 @@ import qualified Keiretsu.Process     as Procs
 
 start :: FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> Bool -> IO ()
 start cfg tmp envs verify build _conc = do
-    putStrLn "[Load]"
+    putStrLn "[Config]"
     deps <- Deps.fromFile cfg tmp
     let slen = show (length deps) <> " dependencies."
     putStrLn $ "Loaded " <> slen
@@ -50,6 +50,6 @@ retry cfg tmp envs = start cfg tmp envs False False False
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = do
-    putStrLn "[Load]"
+    putStrLn "[Config]"
     deps <- Deps.fromFile cfg tmp
     mapM_ (if force then Deps.wipe else Deps.clean) deps

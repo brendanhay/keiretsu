@@ -6,19 +6,22 @@ module Keiretsu.Process (
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Monad.IO.Class
+import Data.ByteString          (ByteString)
+import Data.Char
+import Data.Function
 import Data.List
 import Data.Monoid
-import Data.Text                (Text)
 import Data.Word
 import Network.Socket
 import Keiretsu.Environment
-import Keiretsu.Terminal
+import Keiretsu.Shell
 import Keiretsu.Types
 import System.FilePath
 import System.Exit
 
-import qualified Data.Text       as T
-import qualified Keiretsu.Config as Cfg
+import qualified Data.ByteString.Char8 as BS
+import qualified Keiretsu.Config       as Cfg
+import qualified System.Process        as P
 
 fromDependencies :: [Dep] -> IO [Spec]
 fromDependencies = mapM f
@@ -34,33 +37,22 @@ fromDependencies = mapM f
 
 start :: Env -> [Spec] -> IO [Async ExitCode]
 start env specs = do
-    logger <- getLogger
-    asyncs <- mapM (startSpec env' logger) specs
-    return $ concat asyncs
+    putStrLn "Setting up streams ..."
+    ps <- mergeCommands $ map (`makeCommand` env') procs
+    mapM (async . P.waitForProcess) ps
   where
-    env' = nubBy uniq $ fromProcs (concatMap snd specs) ++ env
-    uniq x y = fst x == fst y
+    procs = concatMap snd specs
+    env'  = nubBy ((==) `on` fst) $ fromProcs procs ++ env
 
-startSpec :: Env -> Logger -> Spec -> IO [Async ExitCode]
-startSpec env logger (name, procs) = do
-    putStrLn $ "Starting " <> T.unpack name <> " processes ..."
-    mapM (startProc env logger) procs
+makeCommand :: Proc -> Env -> Cmd
+makeCommand Proc{..} env = Cmd
+    ((snd . BS.breakEnd (== '/') . BS.pack $ procDir) <> "/" <> procName)
+    procCmd
+    (Just procDir)
+    (("PORT", show procPort) : env)
 
-startProc :: Env -> Logger -> Proc -> IO (Async ExitCode)
-startProc env logger Proc{..} = do
-    putStrLn . init $ unlines
-        [ "Forking " <> T.unpack procName <> " ..."
-        , " Cmd: " <> cmd
-        , " Dir: " <> procDir
-        , " Env: " <> show env'
-        ]
-    async $ fst <$> shell cmd (Just procDir) env' logger
-  where
-    cmd  = T.unpack procCmd
-    env' = ("PORT", show procPort) : env
-
-portVar :: Text -> Text -> Text
-portVar x y = T.toUpper $ T.intercalate "_" [x, y, "port"]
+portVar :: ByteString -> ByteString -> ByteString
+portVar x y = BS.map toUpper $ BS.intercalate "_" [x, y, "port"]
 
 findPorts :: Int -> IO [Word16]
 findPorts n = do

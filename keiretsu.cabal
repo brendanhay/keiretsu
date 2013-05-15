@@ -15,7 +15,7 @@ executable keiretsu
                       , QuasiQuotes
 
     build-depends:      async
-                      , base                 >= 4.5   && < 5
+                      , base                 > 4.5 && < 5
                       , bytestring
                       , cmdtheline
                       , directory
@@ -24,6 +24,7 @@ executable keiretsu
                       , mtl
                       , network
                       , process
+                      , rainbow
                       , shqq
                       , text
                       , transformers

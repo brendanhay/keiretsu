@@ -15,15 +15,15 @@ import System.Directory
 import System.FilePath
 import System.ShQQ
 
-import qualified Data.Text       as T
-import qualified Keiretsu.Config as Cfg
+import qualified Data.ByteString.Char8 as BS
+import qualified Keiretsu.Config       as Cfg
 
 fromFile :: FilePath -> FilePath -> IO [Dep]
 fromFile cfg tmp = do
     putStrLn $ "Loading " <> cfg <> " ..."
     liftIO $ Cfg.load f cfg
   where
-    f k = Dep k (joinPath [tmp, T.unpack k]) . T.unpack
+    f k = Dep k (joinPath [tmp, BS.unpack k]) . BS.unpack
 
 verify :: Dep -> IO ()
 verify d = do

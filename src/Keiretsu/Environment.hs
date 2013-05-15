@@ -8,13 +8,13 @@ import Data.Monoid
 import Keiretsu.Types
 import System.Directory
 
-import qualified Data.Text as T
+import qualified Data.ByteString.Char8 as BS
 
 local :: FilePath
 local = "./.env"
 
 fromProcs :: [Proc] -> Env
-fromProcs = map (\Proc{..} -> (T.unpack procVar, show procPort))
+fromProcs = map (\Proc{..} -> (BS.unpack procVar, show procPort))
 
 fromFiles :: [FilePath] -> IO Env
 fromFiles paths = do

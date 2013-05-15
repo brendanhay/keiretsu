@@ -8,6 +8,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Data.Monoid
+import System.Posix.Signals
 
 import qualified Keiretsu.Dependency  as Deps
 import qualified Keiretsu.Environment as Env
@@ -31,19 +32,19 @@ start cfg tmp envs verify build _conc = do
         putStrLn $ "Built " <> slen
 
     putStrLn "[Procfiles]"
-    specs  <- Procs.fromDependencies deps
+    procs <- Procs.load deps
 
     putStrLn "[Environments]"
-    env    <- Env.fromFiles envs
+    env <- Env.load envs
+
+    putStrLn "[Handlers]"
+    chan <- newChan
+    mapM_ (handle chan) [sigINT, sigKILL, sigQUIT, sigTERM]
 
     putStrLn "[Processes]"
-    asyncs <- Procs.start env specs
+    Procs.start chan env procs >>= void . waitAnyCancel
 
-    putStrLn "Waiting ..."
-    threadDelay 10000
-    void $ waitAnyCancel asyncs
-
-    -- Trap any exit and run cleanup
+    putStrLn "Exiting ..."
 
 retry :: FilePath -> FilePath -> [FilePath] -> IO ()
 retry cfg tmp envs = start cfg tmp envs False False False
@@ -53,3 +54,6 @@ clean cfg tmp force = do
     putStrLn "[Config]"
     deps <- Deps.fromFile cfg tmp
     mapM_ (if force then Deps.wipe else Deps.clean) deps
+
+handle :: Chan Signal -> Signal -> IO ()
+handle chan int = void $ installHandler int (Catch $ writeChan chan int) Nothing

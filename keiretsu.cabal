@@ -28,6 +28,7 @@ executable keiretsu
                       , shqq
                       , text
                       , transformers
+                      , unix
                       , unordered-containers
                       , yaml
 

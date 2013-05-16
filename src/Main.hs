@@ -11,33 +11,53 @@ import qualified Paths_keiretsu as P
 main :: IO ()
 main = do
     name <- getProgName
-    runChoice (defTerm name) [startTerm, retryTerm, cleanTerm]
+    runChoice (defTerm name)
+        [ startTerm "start"
+        , integrateTerm "integrate"
+        , cleanTerm "clean"
+        ]
 
 defTerm :: String -> (Term (IO ()), TermInfo)
 defTerm name = (term, info)
   where
     term = ret $ (\_ _ -> helpFail Pager Nothing) <$> tmp <*> config
     info = (describe
-        "Keiretsu is an orchestration manager for integration\
-        \based testing.  It allows you to specify dependencies\
+        "Keiretsu is an orchestration manager for integration \
+        \based testing.  It allows you to specify dependencies \
         \that should be available before the start of a test run,\
-        \triggers setup/teardown hooks, and applies a consistent\
-        \environment to all child processes ensuring they can\
+        \triggers setup/teardown hooks, and applies a consistent \
+        \environment to all child processes ensuring they can \
         \discover each other.")
         { version  = showVersion P.version
         , termName = name
         }
 
-startTerm :: (Term (IO ()), TermInfo)
-startTerm = (term, info)
+startTerm :: String -> (Term (IO ()), TermInfo)
+startTerm name = (term, info)
   where
-    term = start <$> config <*> tmp <*> envs <*> verify <*> build <*> conc
+    term = start <$> envs
     info = (describe
-        "Rotate input gathered from INPUT or standard-in N \
-        \places.  The input must be composed totally of \
-        \alphabetic characters and spaces.")
-        { termName = "start"
-        , termDoc  = "Update, build, and start dependencies."
+        "Parses and runs the proctypes from a Procfile in the current \
+        \working directory. Equivalent to running: `foreman start`")
+        { termName = name
+        , termDoc  = "Start the local Procfile."
+        }
+
+integrateTerm :: String -> (Term (IO ()), TermInfo)
+integrateTerm name = (term, info)
+  where
+    term = integrate <$> config <*> tmp <*> envs <*> verify <*> build <*> conc
+    info = (describe
+        "Retrieve (or update) dependencies, build them using their \
+        \respective Makefiles, and then start all the dependencies \
+        \according to their respective Procfiles. \
+        \stdout and stderr from the running processes is interleaved \
+        \into the parent's stdout and signals from the parent are \
+        \trapped and delivered to the children. \
+        \Any errors in the children are propagated to the parent and \
+        \cause the sibling processes to exit.")
+        { termName = name
+        , termDoc  = "Update, build, and start all dependencies."
         }
 
     verify = noFlag ["no-verify"]
@@ -49,31 +69,18 @@ startTerm = (term, info)
     conc = noFlag ["no-concurrency"]
         "Don't fork workers for concurrent tasks."
 
-retryTerm :: (Term (IO ()), TermInfo)
-retryTerm = (term, info)
-  where
-    term = retry <$> config <*> tmp <*> envs
-    info = (describe
-        "Rotate input gathered from INPUT or standard-in N \
-        \places.  The input must be composed totally of \
-        \alphabetic characters and spaces.")
-        { termName = "retry"
-        , termDoc  = "Run dependencies without verifying or building."
-        }
-
-cleanTerm :: (Term (IO ()), TermInfo)
-cleanTerm = (clean <$> config <*> tmp <*> force, info)
+cleanTerm :: String -> (Term (IO ()), TermInfo)
+cleanTerm name = (clean <$> config <*> tmp <*> force, info)
   where
     info = (describe
-        "Rotate input gathered from INPUT or standard-in N \
-        \places.  The input must be composed totally of \
-        \alphabetic characters and spaces.")
-        { termName = "clean"
+        "Run `make clean` for each vendored dependency, or using the --force \
+        \flag the entire integration workspace will be removed.")
+        { termName = name
         , termDoc  = "Clean dependencies."
         }
 
     force = value . flag $ (optInfo ["force"])
-        { optDoc = "Force removal of all vendored dependencies."
+        { optDoc = "Force removal of the integration workspace."
         }
 
 common :: String
@@ -105,10 +112,10 @@ config = value . opt "./Intfile" $ (optInfo ["config"])
 
 envs :: Term [FilePath]
 envs = value . optAll [] $ (optInfo ["env"])
-    { optDoc = "Foreman style .env files to merge into all individual \
-               \processes environment.  Can be repeatedly specified.  \
-               \If a .env file exists in the working directory, it will \
-               \ be loaded."
+    { optDoc = "Foreman style .env files to merge into each processes' \
+               \environment.  Can be repeatedly specified.  If a .env file \
+               \exists in the working directory, it will be loaded and \
+               \merged with a lower precedence."
     }
 
 noFlag :: [String] -> String -> Term Bool

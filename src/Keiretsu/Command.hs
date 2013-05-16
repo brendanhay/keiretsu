@@ -1,8 +1,4 @@
-module Keiretsu.Command (
-      start
-    , retry
-    , clean
-    ) where
+module Keiretsu.Command where
 
 import Control.Concurrent
 import Control.Concurrent.Async
@@ -14,8 +10,12 @@ import qualified Keiretsu.Dependency  as Deps
 import qualified Keiretsu.Environment as Env
 import qualified Keiretsu.Process     as Procs
 
-start :: FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> Bool -> IO ()
-start cfg tmp envs verify build _conc = do
+start :: [FilePath] -> IO ()
+start envs = do
+    putStrLn "start!"
+
+integrate :: FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> Bool -> IO ()
+integrate cfg tmp envs verify build _conc = do
     putStrLn "[Config]"
     deps <- Deps.fromFile cfg tmp
     let slen = show (length deps) <> " dependencies."
@@ -45,9 +45,6 @@ start cfg tmp envs verify build _conc = do
     Procs.start chan env procs >>= void . waitAnyCancel
 
     putStrLn "Exiting ..."
-
-retry :: FilePath -> FilePath -> [FilePath] -> IO ()
-retry cfg tmp envs = start cfg tmp envs False False False
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = do

@@ -1,20 +1,71 @@
-module Keiretsu.Config (load) where
+module Keiretsu.Config (
+      readEnvironments
+    , mergeEnvironment
+    , readIntfile
+    , readProcfiles
+    , readProcfile
+    ) where
 
 import Control.Applicative
+import Control.Arrow
+import Control.Monad
 import Data.ByteString     (ByteString)
 import Data.HashMap.Strict (HashMap)
-import Data.Text           (Text)
+import Data.Function
+import Data.List
 import Data.Monoid
+import Data.Text           (Text)
+import Data.Word
+import Keiretsu.Types
+import Network.Socket
+import System.Directory
+import System.FilePath
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text.Encoding    as E
 import qualified Data.HashMap.Strict   as M
 import qualified Data.Yaml             as Y
 
-load :: (ByteString -> ByteString -> a) -> FilePath -> IO [a]
-load f path = map g . M.toList <$> loadYaml path
+local :: FilePath
+local = "./.env"
+
+readEnvironments :: [FilePath] -> IO Env
+readEnvironments paths = do
+    putStrLn "Reading Environments ..."
+    p    <- doesFileExist local
+    strs <- mapM f $ if p then local : paths else paths
+    return . map (second tail . break (== '=')) . lines $ concat strs
   where
-    g (k, v) = f (E.encodeUtf8 k) v
+    f x = putStrLn ("Reading " <> x <> " ...") >> readFile x
+
+mergeEnvironment :: Env -> [Proc] -> Env
+mergeEnvironment env =
+      nubBy ((==) `on` fst)
+    . (++ env)
+    . map (\Proc{..} -> (BS.unpack procVar, show procPort))
+
+readIntfile :: FilePath -> FilePath -> IO [Dep]
+readIntfile cfg tmp = do
+    putStrLn $ "Reading " <> cfg <> " ..."
+    readConfig f cfg
+  where
+    f k = makeDep (joinPath [tmp, BS.unpack k]) (Just k) . Just . BS.unpack
+
+readProcfiles :: [Dep] -> IO [Proc]
+readProcfiles = liftM concat . mapM readProcfile
+
+readProcfile :: Dep -> IO [Proc]
+readProcfile d = do
+    putStrLn $ "Reading " <> cfg <> " ..."
+    xs <- readConfig (makeProc d) cfg
+    ys <- freePorts $ length xs
+    return $ zipWith ($) xs ys
+  where
+    cfg = joinPath [depPath d, "Procfile"]
+
+readConfig :: (ByteString -> ByteString -> a) -> FilePath -> IO [a]
+readConfig f path =
+    map (\(k, v) -> f (E.encodeUtf8 k) v) . M.toList <$> loadYaml path
 
 loadYaml :: FilePath -> IO (HashMap Text ByteString)
 loadYaml path = maybe err (return . tmap) =<< Y.decodeFile path
@@ -26,3 +77,17 @@ loadYaml path = maybe err (return . tmap) =<< Y.decodeFile path
 
     conv (Y.String t) = E.encodeUtf8 t
     conv other        = BS.pack $ show other
+
+freePorts :: Int -> IO [Word16]
+freePorts n = do
+    ss <- sequence . take n $ repeat assignSocket
+    ps <- mapM ((fromIntegral <$>) . socketPort) ss
+    mapM_ close ss
+    return ps
+
+assignSocket :: IO Socket
+assignSocket = do
+    s <- socket AF_INET Stream defaultProtocol
+    a <- inet_addr "127.0.0.1"
+    bind s $ SockAddrInet aNY_PORT a
+    return s

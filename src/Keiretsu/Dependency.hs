@@ -1,33 +1,19 @@
 module Keiretsu.Dependency (
-      fromFile
-    , verify
+      verify
     , build
     , wipe
-    , clean
     ) where
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.IO.Class
 import Data.Monoid
 import Keiretsu.Types
 import System.Directory
-import System.FilePath
 import System.ShQQ
-
-import qualified Data.ByteString.Char8 as BS
-import qualified Keiretsu.Config       as Cfg
-
-fromFile :: FilePath -> FilePath -> IO [Dep]
-fromFile cfg tmp = do
-    putStrLn $ "Loading " <> cfg <> " ..."
-    liftIO $ Cfg.load f cfg
-  where
-    f k = Dep k (joinPath [tmp, BS.unpack k]) . BS.unpack
 
 verify :: Dep -> IO ()
 verify d = do
-    p <- liftIO . doesDirectoryExist $ depPath d
+    p <- doesDirectoryExist $ depPath d
     (if p then update else clone) d
 
 build :: Dep -> IO ()
@@ -36,39 +22,42 @@ build Dep{..} = do
     void [sh| cd $depPath && make install |]
 
 update :: Dep -> IO ()
-update d@Dep{..} = do
-    p <- origin d
-    if p
-     then do
-         putStrLn $ "Updating " <> depPath <> " ..."
-         void [sh| cd $depPath && git pull -f |]
-     else clone d
+update d@Dep{..} = case depUri of
+    Nothing -> return ()
+    Just x  -> do
+        p <- origin depPath x
+        if p
+         then do
+             putStrLn $ "Updating " <> depPath <> " ..."
+             void [sh| cd $depPath && git pull -f |]
+         else clone d
 
-origin :: Dep -> IO Bool
-origin Dep{..} = do
-    p <- liftIO $ doesDirectoryExist depPath
+origin :: FilePath -> String -> IO Bool
+origin path uri = do
+    p <- doesDirectoryExist path
+    print p
+    print uri
+    c <- [sh| cd $path && git config --get remote.origin.uri |]
+    print c
     if p
-     then eq <$> [sh| cd $depPath && git config --get remote.origin.url |]
+     then eq <$> [sh| cd $path && git config --get remote.origin.uri |]
      else return False
   where
-    eq = (j depUrl ==) . j
+    eq = (j uri ==) . j
     j  = unwords . lines
 
 clone :: Dep -> IO ()
-clone d@Dep{..} = do
-    wipe d
-    putStrLn $ "Cloning " <> depUrl <> " ..."
-    void [sh| git clone $depUrl $depPath $+redirect |]
+clone d@Dep{..} = case depUri of
+    Nothing -> return ()
+    Just x  -> do
+        wipe True d
+        putStrLn $ "Cloning " <> x <> " ..."
+        void [sh| git clone $x $depPath |]
 
-wipe :: Dep -> IO ()
-wipe Dep{..} = do
+wipe :: Bool -> Dep -> IO ()
+wipe True Dep{..} = do
     putStrLn $ "Wiping " <> depPath <> " ..."
     void [sh| rm -rf $depPath |]
-
-clean :: Dep -> IO ()
-clean Dep{..} = do
+wipe False Dep{..} = do
     putStrLn $ "Cleaning " <> depPath <> " ..."
     void [sh| cd $depPath && make clean |]
-
-redirect :: String
-redirect = " > /dev/null 2>&1"

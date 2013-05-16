@@ -14,6 +14,7 @@ main = do
     runChoice (defTerm name)
         [ startTerm "start"
         , integrateTerm "integrate"
+        , testTerm "test"
         , cleanTerm "clean"
         ]
 
@@ -35,7 +36,7 @@ defTerm name = (term, info)
 startTerm :: String -> (Term (IO ()), TermInfo)
 startTerm name = (term, info)
   where
-    term = start <$> envs
+    term = foreman <$> envs
     info = (describe
         "Parses and runs the proctypes from a Procfile in the current \
         \working directory. Equivalent to running: `foreman start`")
@@ -46,7 +47,7 @@ startTerm name = (term, info)
 integrateTerm :: String -> (Term (IO ()), TermInfo)
 integrateTerm name = (term, info)
   where
-    term = integrate <$> config <*> tmp <*> envs <*> verify <*> build <*> conc
+    term = integrate <$> config <*> tmp <*> envs <*> verify <*> build
     info = (describe
         "Retrieve (or update) dependencies, build them using their \
         \respective Makefiles, and then start all the dependencies \
@@ -60,14 +61,16 @@ integrateTerm name = (term, info)
         , termDoc  = "Update, build, and start all dependencies."
         }
 
-    verify = noFlag ["no-verify"]
-        "Skip verification phase."
-
-    build = noFlag ["no-build"]
-        "Skip build phase."
-
-    conc = noFlag ["no-concurrency"]
-        "Don't fork workers for concurrent tasks."
+testTerm :: String -> (Term (IO ()), TermInfo)
+testTerm name = (term, info)
+  where
+    term = test <$> config <*> tmp <*> envs <*> verify <*> build
+    info = (describe
+        "Parses and runs the proctypes from a Procfile in the current \
+        \working directory. Equivalent to running: `foreman test`")
+        { termName = name
+        , termDoc  = "Test the local Procfile."
+        }
 
 cleanTerm :: String -> (Term (IO ()), TermInfo)
 cleanTerm name = (clean <$> config <*> tmp <*> force, info)
@@ -117,6 +120,12 @@ envs = value . optAll [] $ (optInfo ["env"])
                \exists in the working directory, it will be loaded and \
                \merged with a lower precedence."
     }
+
+verify :: Term Bool
+verify = noFlag ["no-verify"] "Skip verification phase."
+
+build :: Term Bool
+build = noFlag ["no-build"] "Skip build phase."
 
 noFlag :: [String] -> String -> Term Bool
 noFlag opts doc = value $ vFlag True [(False, (optInfo opts) { optDoc = doc })]

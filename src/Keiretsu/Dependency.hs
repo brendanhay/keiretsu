@@ -1,3 +1,6 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 module Keiretsu.Dependency (
       verify
     , build

@@ -58,11 +58,11 @@ cabal install
 
 ### Dependencies
 
-### Procfile
+#### Procfile
 
 > TODO
 
-### Makefile
+#### Makefile
 
 > TODO
 

@@ -3,11 +3,12 @@
 module Keiretsu.Types where
 
 import Control.Concurrent
-import Data.ByteString (ByteString)
 import Data.Char
+import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Word
+import System.Console.Rainbow
 import System.Directory
 import System.Posix.Signals
 import System.Process
@@ -25,11 +26,11 @@ type Env = [(String, String)]
 
 data Dep = Dep
     { depPath :: FilePath
-    , depName :: ByteString
+    , depName :: String
     , depUri  :: Maybe String
     } deriving (Eq, Show)
 
-makeDep :: FilePath -> Maybe ByteString -> Maybe String -> Dep
+makeDep :: FilePath -> Maybe String -> Maybe String -> Dep
 makeDep path mname = Dep path (fromMaybe (dirName path) mname)
 
 makeLocalDep :: IO Dep
@@ -39,40 +40,51 @@ makeLocalDep = do
 
 data Proc = Proc
     { procPath :: FilePath
-    , procName :: ByteString
-    , procCmd  :: ByteString
+    , procName :: String
+    , procCmd  :: String
     , procPort :: (String, String)
     } deriving (Eq, Show)
 
-makeProc :: Dep -> ByteString -> ByteString -> Word16 -> Proc
+makeProc :: Dep -> String -> String -> Word16 -> Proc
 makeProc Dep{..} name cmd port =
     Proc depPath name cmd (portVar depName name, show port)
 
-makeLocalProc :: ByteString -> ByteString -> IO Proc
+makeLocalProc :: String -> String -> IO Proc
 makeLocalProc name cmd = do
     dir <- getCurrentDirectory
     return $ makeProc (makeDep dir (Just name) Nothing) name cmd 0
 
-portVar :: ByteString -> ByteString -> String
-portVar x y =
-    BS.unpack . BS.map toUpper $ BS.intercalate "_" [x, y, "PORT"]
+portVar :: String -> String -> String
+portVar x y = map toUpper $ intercalate "_" [x, y, "PORT"]
 
 data Cmd = Cmd
-    { cmdPre :: ByteString
-    , cmdStr :: ByteString
-    , cmdDir :: Maybe FilePath
-    , cmdEnv :: Env
-    } deriving (Eq, Show)
+    { cmdPre   :: String
+    , cmdStr   :: String
+    , cmdDir   :: Maybe FilePath
+    , cmdEnv   :: Env
+    , cmdColor :: ForegroundAll
+    }
 
-makeCmd :: Env -> Proc -> Cmd
-makeCmd env Proc{..} = Cmd
-    (dirName procPath <> "/" <> procName)
-    procCmd
-    (Just procPath)
-    (("PORT", snd procPort) : procPort : env)
+colors :: [ForegroundAll]
+colors = cycle
+    [ f_red
+    , f_green
+    , f_yellow
+    , f_blue
+    , f_magenta
+    , f_cyan
+    , f_white
+    ]
 
-makeCmds :: Env -> [Proc] -> [Cmd]
-makeCmds env = map (makeCmd env)
+makeCmds :: [ForegroundAll] -> Env -> [Proc] -> ([Cmd], [ForegroundAll])
+makeCmds cs env ps = (zipWith mk ps cs', rst)
+  where
+    (cs', rst) = splitAt (length ps) cs
+    mk Proc{..} = Cmd
+        (dirName procPath <> "/" <> procName)
+        procCmd
+        (Just procPath)
+        (("PORT", snd procPort) : procPort : env)
 
-dirName :: FilePath -> ByteString
-dirName = snd . BS.breakEnd (== '/') . BS.pack
+dirName :: FilePath -> String
+dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack

@@ -19,15 +19,23 @@ import System.Posix.Signals
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = readIntfile cfg tmp >>= mapM_ (wipe force)
 
-foreman :: [FilePath] -> IO ()
-foreman paths = do
+foreman :: [FilePath] -> Bool -> IO ()
+foreman paths fdump = do
     dep <- makeLocalDep
     ps  <- readProcfile dep
     env <- readEnvironments paths ps
-    forkWait $ makeCmds env ps
 
-integrate :: Bool -> FilePath -> FilePath -> [FilePath] -> Bool -> Bool -> IO ()
-integrate test cfg tmp paths fverify fbuild = do
+    forkWait fdump . fst $ makeCmds colors env ps
+
+integrate :: Bool
+          -> FilePath
+          -> FilePath
+          -> [FilePath]
+          -> Bool
+          -> Bool
+          -> Bool
+          -> IO ()
+integrate test cfg tmp paths fdump fverify fbuild = do
     ex   <- if test
              then sequence [makeLocalProc "test" "make test"]
              else return []
@@ -41,18 +49,19 @@ integrate test cfg tmp paths fverify fbuild = do
     penv <- readEnvironments paths ps
     lenv <- getEnvironment
 
-    let disc = makeCmds penv ps
-        spec = makeCmds (penv ++ lenv) ex
+    let (disc, cs) = makeCmds colors penv ps
+        (spec, _)  = makeCmds cs (penv ++ lenv) ex
+        cmds = disc ++ spec
 
-    forkWait $ disc ++ spec
+    forkWait fdump cmds
 
 whenFlag :: Bool -> (a -> IO b) -> [a] -> IO ()
 whenFlag p f = when p . void . mapConcurrently f
 
-forkWait :: [Cmd] -> IO ()
-forkWait cs = do
+forkWait :: Bool -> [Cmd] -> IO ()
+forkWait dump cs = do
     chan <- handleSignals
-    runCommands chan cs >>= exitAfter
+    runCommands dump chan cs >>= exitAfter
 
 handleSignals :: IO SignalChan
 handleSignals = do

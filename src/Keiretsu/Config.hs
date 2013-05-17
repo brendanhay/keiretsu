@@ -8,7 +8,6 @@ module Keiretsu.Config (
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
-import Data.ByteString     (ByteString)
 import Data.HashMap.Strict (HashMap)
 import Data.Function
 import Data.List
@@ -20,10 +19,9 @@ import Network.Socket
 import System.Directory
 import System.FilePath
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Text.Encoding    as E
-import qualified Data.HashMap.Strict   as M
-import qualified Data.Yaml             as Y
+import qualified Data.Text           as T
+import qualified Data.HashMap.Strict as M
+import qualified Data.Yaml           as Y
 
 local :: FilePath
 local = "./.env"
@@ -49,7 +47,7 @@ readIntfile cfg tmp = do
     putStrLn $ "Reading " <> cfg <> " ..."
     readConfig f cfg
   where
-    f k = makeDep (joinPath [tmp, BS.unpack k]) (Just k) . Just . BS.unpack
+    f k = makeDep (joinPath [tmp, k]) (Just k) . Just
 
 readProcfiles :: [Dep] -> IO [Proc]
 readProcfiles = liftM concat . mapM readProcfile
@@ -63,11 +61,11 @@ readProcfile d = do
   where
     cfg = joinPath [depPath d, "Procfile"]
 
-readConfig :: (ByteString -> ByteString -> a) -> FilePath -> IO [a]
+readConfig :: (String -> String -> a) -> FilePath -> IO [a]
 readConfig f path =
-    map (\(k, v) -> f (E.encodeUtf8 k) v) . M.toList <$> loadYaml path
+    map (\(k, v) -> f (T.unpack k) v) . M.toList <$> loadYaml path
 
-loadYaml :: FilePath -> IO (HashMap Text ByteString)
+loadYaml :: FilePath -> IO (HashMap Text String)
 loadYaml path = maybe err (return . tmap) =<< Y.decodeFile path
   where
     err = error $ "Invalid config file: " <> path
@@ -75,8 +73,8 @@ loadYaml path = maybe err (return . tmap) =<< Y.decodeFile path
     tmap (Y.Object m) = M.map conv m
     tmap other        = error $ "Invalid config object: " <> show other
 
-    conv (Y.String t) = E.encodeUtf8 t
-    conv other        = BS.pack $ show other
+    conv (Y.String t) = T.unpack t
+    conv other        = show other
 
 freePorts :: Int -> IO [Word16]
 freePorts n = do

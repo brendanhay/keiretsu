@@ -7,7 +7,9 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Data.ByteString          (ByteString, hGetSome)
+import Data.List
 import Data.Monoid
+import Data.Text                (Text)
 import Keiretsu.Types
 import System.Console.Rainbow
 import System.Exit
@@ -18,6 +20,7 @@ import System.Process           (CreateProcess, ProcessHandle)
 import System.Process.Internals (ProcessHandle__(..), withProcessHandle_)
 
 import qualified Data.ByteString.Char8        as BS
+import qualified Data.Text                    as T
 import qualified Data.Text.Encoding           as E
 import qualified System.IO.Streams            as S
 import qualified System.IO.Streams.Concurrent as S
@@ -26,28 +29,19 @@ import qualified System.Process               as P
 bufferSize :: Int
 bufferSize = 32752
 
-colors :: [ForegroundAll]
-colors =
-    [ f_red
-    , f_green
-    , f_yellow
-    , f_blue
-    , f_magenta
-    , f_cyan
-    , f_white
-    ]
-
-runCommands :: SignalChan -> [Cmd] -> IO [Async ExitCode]
-runCommands chan cmds = do
-    (ps, ss) <- unzip <$> zipWithM runCommand (cycle colors) cmds
-    supplyTerm ss >>= link
+runCommands :: Bool -> SignalChan -> [Cmd] -> IO [Async ExitCode]
+runCommands dump chan cmds = do
+    (ps, ss) <- unzip <$> mapM runCommand cmds
+    term     <- termFromEnv
+    supplyTerm term ss >>= link
+    when dump $ dumpEnv term cmds
     waitForSignals chan ps
     mapM (waitForProcess chan) ps
 
-runCommand :: ForegroundAll -> Cmd -> IO (ProcessHandle, InputStream [Chunk])
-runCommand fmt cmd = do
+runCommand :: Cmd -> IO (ProcessHandle, InputStream [Chunk])
+runCommand cmd = do
     (Nothing, Just out, Nothing, pid) <- P.createProcess $ processSettings cmd
-    i <- handleToInput fmt out $ cmdPre cmd
+    i <- handleToInput cmd out
     return (pid, i)
 
 waitForProcess :: SignalChan -> ProcessHandle -> IO (Async ExitCode)
@@ -67,39 +61,53 @@ signalProcess' sig pid =
 
 processSettings :: Cmd -> CreateProcess
 processSettings Cmd{..} =
-    (P.shell . BS.unpack $ appendRedirect cmdStr)
+    (P.shell $ appendRedirect cmdStr)
         { P.std_out = P.CreatePipe
         , P.env     = if null cmdEnv then Nothing else Just cmdEnv
         , P.cwd     = cmdDir
         }
 
-appendRedirect :: ByteString -> ByteString
-appendRedirect bs = if suf `BS.isInfixOf` bs then bs else bs <> suf
+appendRedirect :: String -> String
+appendRedirect str = if suf `isInfixOf` str then str else str <> suf
   where
     suf = " 2>&1"
 
-handleToInput :: ForegroundAll
-              -> Handle
-              -> ByteString
-              -> IO (InputStream [Chunk])
-handleToInput fmt hd pre = S.makeInputStream (readBuffer hd >>= f)
+handleToInput :: Cmd -> Handle -> IO (InputStream [Chunk])
+handleToInput cmd hd = S.makeInputStream (readBuffer hd >>= f)
     >>= S.atEndOfInput (hClose hd)
     >>= S.lockingInputStream
   where
     f bs | BS.null bs         = return Nothing
-         | BS.last bs == '\n' = return $! Just $ formatLines fmt pre bs
+         | BS.last bs == '\n' = return $! Just $ formatLines cmd bs
          | otherwise          = readBuffer hd >>= f . (bs <>)
 
 readBuffer :: Handle -> IO ByteString
 readBuffer = (`hGetSome` bufferSize)
 
-formatLines :: ForegroundAll -> ByteString -> ByteString -> [Chunk]
-formatLines fmt pre = concatMap f . BS.lines
+dumpEnv :: Term -> [Cmd] -> IO ()
+dumpEnv term = mapM_ (printChunks term . formatEnv)
+
+formatEnv :: Cmd -> [Chunk]
+formatEnv cmd = formatLine cmd ("Environment: " <> T.pack (cmdStr cmd))
+    ++ concatMap f (cmdEnv cmd)
   where
-    f bs = [ plain (E.decodeUtf8 pre <> ": ") +.+ fmt +.+ bold
-           , plain (E.decodeUtf8 bs) +.+ fmt
-           , plain "\n"
-           ]
+    f (k, v) = formatLine cmd $ T.pack k <> ": " <> T.pack v
+
+formatLines :: Cmd -> ByteString -> [Chunk]
+formatLines cmd =
+    concatMap (formatLine cmd . E.decodeUtf8) . BS.lines
+
+formatLine :: Cmd -> Text -> [Chunk]
+formatLine Cmd{..} txt =
+    [ plain (T.pack cmdPre <> ": ") +.+ cmdColor +.+ bold
+    , plain (txt <> "\n") +.+ cmdColor
+    ]
+
+supplyTerm :: Term -> [InputStream [Chunk]] -> IO (Async ())
+supplyTerm term ss =
+    async . join $ S.supply
+        <$> S.concurrentMerge ss
+        <*> termToOutput term
 
 termToOutput :: Term -> IO (OutputStream [Chunk])
 termToOutput term = S.makeOutputStream f >>= S.lockingOutputStream
@@ -107,8 +115,3 @@ termToOutput term = S.makeOutputStream f >>= S.lockingOutputStream
     f Nothing   = return ()
     f (Just cs) = printChunks term cs
 
-supplyTerm :: [InputStream [Chunk]] -> IO (Async ())
-supplyTerm ss =
-    async . join $ S.supply
-        <$> S.concurrentMerge ss
-        <*> (termFromEnv >>= termToOutput)

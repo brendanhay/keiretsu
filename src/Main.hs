@@ -36,7 +36,11 @@ defTerm name = (term, info)
 cleanTerm :: String -> (Term (IO ()), TermInfo)
 cleanTerm name = (term, info)
   where
-    term = clean <$> config <*> tmp <*> force
+    term = clean
+        <$> config
+        <*> tmp
+        <*> force
+
     info = (describe
         "Run `make clean` for each vendored dependency, or using the --force \
         \flag the entire integration workspace will be removed.")
@@ -47,7 +51,10 @@ cleanTerm name = (term, info)
 startTerm :: String -> (Term (IO ()), TermInfo)
 startTerm name = (term, info)
   where
-    term = foreman <$> envs
+    term = foreman
+        <$> envs
+        <*> dump
+
     info = (describe
         "Parses and runs the proctypes from a Procfile in the current \
         \working directory. Equivalent to running: `foreman start`")
@@ -58,7 +65,14 @@ startTerm name = (term, info)
 integrateTerm :: String -> (Term (IO ()), TermInfo)
 integrateTerm name = (term, info)
   where
-    term = integrate False <$> config <*> tmp <*> envs <*> verify <*> build
+    term = integrate False
+        <$> config
+        <*> tmp
+        <*> envs
+        <*> dump
+        <*> verify
+        <*> build
+
     info = (describe
         "Retrieve (or update) dependencies, build them using their \
         \respective Makefiles, and then start all the dependencies \
@@ -75,7 +89,14 @@ integrateTerm name = (term, info)
 testTerm :: String -> (Term (IO ()), TermInfo)
 testTerm name = (term, info)
   where
-    term = integrate True <$> config <*> tmp <*> envs <*> verify <*> build
+    term = integrate True
+        <$> config
+        <*> tmp
+        <*> envs
+        <*> dump
+        <*> verify
+        <*> build
+
     info = (describe
         "Parses and runs the proctypes from a Procfile in the current \
         \working directory. Equivalent to running: `foreman test`")
@@ -121,6 +142,11 @@ envs = value . optAll [] $ (optInfo ["env"])
 force :: Term Bool
 force = value . flag $ (optInfo ["force"])
     { optDoc = "Force removal of the integration workspace."
+    }
+
+dump :: Term Bool
+dump = value . flag $ (optInfo ["dump"])
+    { optDoc = "Dump the environment for each process to stdout prior to starting."
     }
 
 verify :: Term Bool

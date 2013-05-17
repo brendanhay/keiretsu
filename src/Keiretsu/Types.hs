@@ -18,16 +18,15 @@ import qualified Data.ByteString.Char8 as BS
 
 type SignalChan = Chan (Signal, Maybe ProcessHandle)
 
--- Orphan instance
 instance Eq ProcessHandle where
     (ProcessHandle a) == (ProcessHandle b) = a == b
 
 type Env = [(String, String)]
 
 data Dep = Dep
-    { depPath :: FilePath
-    , depName :: String
-    , depUri  :: Maybe String
+    { depPath :: !FilePath
+    , depName :: !String
+    , depUri  :: !(Maybe String)
     } deriving (Eq, Show)
 
 makeDep :: FilePath -> Maybe String -> Maybe String -> Dep
@@ -39,10 +38,10 @@ makeLocalDep = do
     return $ makeDep dir Nothing Nothing
 
 data Proc = Proc
-    { procPath :: FilePath
-    , procName :: String
-    , procCmd  :: String
-    , procPort :: (String, String)
+    { procPath :: !FilePath
+    , procName :: !String
+    , procCmd  :: !String
+    , procPort :: !(String, String)
     } deriving (Eq, Show)
 
 makeProc :: Dep -> String -> String -> Word16 -> Proc
@@ -58,11 +57,12 @@ portVar :: String -> String -> String
 portVar x y = map toUpper $ intercalate "_" [x, y, "PORT"]
 
 data Cmd = Cmd
-    { cmdPre   :: String
-    , cmdStr   :: String
-    , cmdDir   :: Maybe FilePath
-    , cmdEnv   :: Env
-    , cmdColor :: ForegroundAll
+    { cmdPre   :: !String
+    , cmdStr   :: !String
+    , cmdDelay :: !Int
+    , cmdDir   :: !(Maybe FilePath)
+    , cmdEnv   :: !Env
+    , cmdColor :: !ForegroundAll
     }
 
 colors :: [ForegroundAll]
@@ -76,13 +76,14 @@ colors = cycle
     , f_white
     ]
 
-makeCmds :: [ForegroundAll] -> Env -> [Proc] -> ([Cmd], [ForegroundAll])
-makeCmds cs env ps = (zipWith mk ps cs', rst)
+makeCmds :: [ForegroundAll] -> Env -> Int -> [Proc] -> ([Cmd], [ForegroundAll])
+makeCmds cs env delay ps = (zipWith mk ps cs', rst)
   where
     (cs', rst) = splitAt (length ps) cs
     mk Proc{..} = Cmd
         (dirName procPath <> "/" <> procName)
         procCmd
+        delay
         (Just procPath)
         (("PORT", snd procPort) : procPort : env)
 

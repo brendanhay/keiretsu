@@ -29,7 +29,7 @@ local = "./.env"
 readEnvironments :: [FilePath] -> [Proc] -> IO Env
 readEnvironments paths ps = do
     p <- doesFileExist local
-    s <- mapM f $ if p then local : paths else paths
+    s <- mapM f $ if p then paths ++ [local] else paths
     return $! mergeEnvironment (parseEnvironment s) ps
   where
     f x = putStrLn ("Reading " <> x <> " ...") >> readFile x
@@ -87,5 +87,6 @@ assignSocket :: IO Socket
 assignSocket = do
     s <- socket AF_INET Stream defaultProtocol
     a <- inet_addr "127.0.0.1"
+    setSocketOption s NoDelay 0
     bind s $ SockAddrInet aNY_PORT a
     return s

@@ -33,8 +33,11 @@ runCommands :: Bool -> SignalChan -> [Cmd] -> IO [Async ExitCode]
 runCommands dump chan cmds = do
     (ps, ss) <- unzip <$> mapM runCommand cmds
     term     <- termFromEnv
+
     supplyTerm term ss >>= link
+
     when dump $ dumpEnv term cmds
+
     waitForSignals chan ps
     mapM (waitForProcess chan) ps
 

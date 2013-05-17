@@ -12,16 +12,18 @@ main :: IO ()
 main = do
     name <- getProgName
     runChoice (defTerm name)
-        [ startTerm "start"
-        , cleanTerm "clean"
-        , testTerm "test"
+        [ cleanTerm "clean"
+        , startTerm "start"
         , integrateTerm "integrate"
         ]
 
 defTerm :: String -> (Term (IO ()), TermInfo)
 defTerm name = (term, info)
   where
-    term = ret $ (\_ _ -> helpFail Pager Nothing) <$> tmp <*> config
+    term = ret $ (\_ _ -> helpFail Pager Nothing)
+        <$> tmp
+        <*> config
+
     info = (describe
         "Keiretsu is an orchestration manager for integration \
         \based testing.  It allows you to specify dependencies \
@@ -51,7 +53,7 @@ cleanTerm name = (term, info)
 startTerm :: String -> (Term (IO ()), TermInfo)
 startTerm name = (term, info)
   where
-    term = foreman
+    term = start
         <$> envs
         <*> dump
 
@@ -65,10 +67,13 @@ startTerm name = (term, info)
 integrateTerm :: String -> (Term (IO ()), TermInfo)
 integrateTerm name = (term, info)
   where
-    term = integrate False
+    term = integrate
         <$> config
         <*> tmp
         <*> envs
+        <*> runs
+        <*> excludes
+        <*> delay
         <*> dump
         <*> verify
         <*> build
@@ -84,24 +89,6 @@ integrateTerm name = (term, info)
         \cause the sibling processes to exit.")
         { termName = name
         , termDoc  = "Update, build, and start all dependencies."
-        }
-
-testTerm :: String -> (Term (IO ()), TermInfo)
-testTerm name = (term, info)
-  where
-    term = integrate True
-        <$> config
-        <*> tmp
-        <*> envs
-        <*> dump
-        <*> verify
-        <*> build
-
-    info = (describe
-        "Parses and runs the proctypes from a Procfile in the current \
-        \working directory. Equivalent to running: `foreman test`")
-        { termName = name
-        , termDoc  = "Test the local Procfile."
         }
 
 common :: String
@@ -139,6 +126,16 @@ envs = value . optAll [] $ (optInfo ["env"])
                \merged with a lower precedence."
     }
 
+excludes :: Term [String]
+excludes = value . optAll [] $ (optInfo ["exclude"])
+    { optDoc = "Implies --delay"
+    }
+
+runs :: Term [String]
+runs = value . optAll [] $ (optInfo ["run"])
+    { optDoc = "Implies --delay"
+    }
+
 force :: Term Bool
 force = value . flag $ (optInfo ["force"])
     { optDoc = "Force removal of the integration workspace."
@@ -147,6 +144,11 @@ force = value . flag $ (optInfo ["force"])
 dump :: Term Bool
 dump = value . flag $ (optInfo ["dump"])
     { optDoc = "Dump the environment for each process to stdout prior to starting."
+    }
+
+delay :: Term Int
+delay = value . opt 1 $ (optInfo ["delay"])
+    { optDoc = "Delay after dependency start, before forking --run arguments"
     }
 
 verify :: Term Bool

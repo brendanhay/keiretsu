@@ -13,9 +13,9 @@ main = do
     name <- getProgName
     runChoice (defTerm name)
         [ startTerm "start"
-        , integrateTerm "integrate"
-        , testTerm "test"
         , cleanTerm "clean"
+        , testTerm "test"
+        , integrateTerm "integrate"
         ]
 
 defTerm :: String -> (Term (IO ()), TermInfo)
@@ -33,6 +33,17 @@ defTerm name = (term, info)
         , termName = name
         }
 
+cleanTerm :: String -> (Term (IO ()), TermInfo)
+cleanTerm name = (term, info)
+  where
+    term = clean <$> config <*> tmp <*> force
+    info = (describe
+        "Run `make clean` for each vendored dependency, or using the --force \
+        \flag the entire integration workspace will be removed.")
+        { termName = name
+        , termDoc  = "Clean dependencies."
+        }
+
 startTerm :: String -> (Term (IO ()), TermInfo)
 startTerm name = (term, info)
   where
@@ -47,7 +58,7 @@ startTerm name = (term, info)
 integrateTerm :: String -> (Term (IO ()), TermInfo)
 integrateTerm name = (term, info)
   where
-    term = integrate <$> config <*> tmp <*> envs <*> verify <*> build
+    term = integrate False <$> config <*> tmp <*> envs <*> verify <*> build
     info = (describe
         "Retrieve (or update) dependencies, build them using their \
         \respective Makefiles, and then start all the dependencies \
@@ -64,26 +75,12 @@ integrateTerm name = (term, info)
 testTerm :: String -> (Term (IO ()), TermInfo)
 testTerm name = (term, info)
   where
-    term = test <$> config <*> tmp <*> envs <*> verify <*> build
+    term = integrate True <$> config <*> tmp <*> envs <*> verify <*> build
     info = (describe
         "Parses and runs the proctypes from a Procfile in the current \
         \working directory. Equivalent to running: `foreman test`")
         { termName = name
         , termDoc  = "Test the local Procfile."
-        }
-
-cleanTerm :: String -> (Term (IO ()), TermInfo)
-cleanTerm name = (clean <$> config <*> tmp <*> force, info)
-  where
-    info = (describe
-        "Run `make clean` for each vendored dependency, or using the --force \
-        \flag the entire integration workspace will be removed.")
-        { termName = name
-        , termDoc  = "Clean dependencies."
-        }
-
-    force = value . flag $ (optInfo ["force"])
-        { optDoc = "Force removal of the integration workspace."
         }
 
 common :: String
@@ -119,6 +116,11 @@ envs = value . optAll [] $ (optInfo ["env"])
                \environment.  Can be repeatedly specified.  If a .env file \
                \exists in the working directory, it will be loaded and \
                \merged with a lower precedence."
+    }
+
+force :: Term Bool
+force = value . flag $ (optInfo ["force"])
+    { optDoc = "Force removal of the integration workspace."
     }
 
 verify :: Term Bool

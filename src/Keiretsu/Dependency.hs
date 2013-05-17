@@ -35,10 +35,6 @@ update d@Dep{..} = case depUri of
 origin :: FilePath -> String -> IO Bool
 origin path uri = do
     p <- doesDirectoryExist path
-    print p
-    print uri
-    c <- [sh| cd $path && git config --get remote.origin.uri |]
-    print c
     if p
      then eq <$> [sh| cd $path && git config --get remote.origin.uri |]
      else return False

@@ -1,5 +1,5 @@
 module Keiretsu.Process (
-      forkProcesses
+      runCommands
     ) where
 
 import Control.Applicative
@@ -8,7 +8,6 @@ import Control.Concurrent.Async
 import Control.Monad
 import Data.ByteString          (ByteString, hGetSome)
 import Data.Monoid
-import Keiretsu.Config
 import Keiretsu.Types
 import System.Console.Rainbow
 import System.Exit
@@ -38,14 +37,7 @@ colors =
     , f_white
     ]
 
-forkProcesses :: Chan Signal -> Env -> [Proc] -> IO [Async ExitCode]
-forkProcesses chan env ps = do
-    putStrLn "Forking Processes ..."
-    runCommands chan $ map (`makeCmd` e) ps
-  where
-    e = mergeEnvironment env ps
-
-runCommands :: Chan Signal -> [Cmd] -> IO [Async ExitCode]
+runCommands :: SignalChan -> [Cmd] -> IO [Async ExitCode]
 runCommands chan cmds = do
     (ps, ss) <- unzip <$> zipWithM runCommand (cycle colors) cmds
     supplyTerm ss >>= link
@@ -58,13 +50,14 @@ runCommand fmt cmd = do
     i <- handleToInput fmt out $ cmdPre cmd
     return (pid, i)
 
-waitForProcess :: Chan Signal -> ProcessHandle -> IO (Async ExitCode)
+waitForProcess :: SignalChan -> ProcessHandle -> IO (Async ExitCode)
 waitForProcess chan pid =
-    async $ P.waitForProcess pid <* writeChan chan sigINT
+    async $ P.waitForProcess pid <* writeChan chan (sigINT, Just pid)
 
-waitForSignals :: Chan Signal -> [ProcessHandle] -> IO (Async ())
-waitForSignals chan ps =
-    async . forever $ readChan chan >>= \sig -> mapM (signalProcess' sig) ps
+waitForSignals :: SignalChan -> [ProcessHandle] -> IO (Async ())
+waitForSignals chan ps = async . forever $ do
+    (sig, pid) <- readChan chan
+    mapM (signalProcess' sig) $ filter ((pid /=) . Just) ps
 
 signalProcess' :: Signal -> ProcessHandle -> IO ()
 signalProcess' sig pid =

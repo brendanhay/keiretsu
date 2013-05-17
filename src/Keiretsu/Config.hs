@@ -1,6 +1,5 @@
 module Keiretsu.Config (
       readEnvironments
-    , mergeEnvironment
     , readIntfile
     , readProcfiles
     , readProcfile
@@ -29,20 +28,21 @@ import qualified Data.Yaml             as Y
 local :: FilePath
 local = "./.env"
 
-readEnvironments :: [FilePath] -> IO Env
-readEnvironments paths = do
-    putStrLn "Reading Environments ..."
-    p    <- doesFileExist local
-    strs <- mapM f $ if p then local : paths else paths
-    return . map (second tail . break (== '=')) . lines $ concat strs
+readEnvironments :: [FilePath] -> [Proc] -> IO Env
+readEnvironments paths ps = do
+    p <- doesFileExist local
+    s <- mapM f $ if p then local : paths else paths
+    return $! mergeEnvironment (parseEnvironment s) ps
   where
     f x = putStrLn ("Reading " <> x <> " ...") >> readFile x
 
+parseEnvironment :: [String] -> Env
+parseEnvironment =
+    map (second tail . break (== '=')) . lines . concat
+
 mergeEnvironment :: Env -> [Proc] -> Env
 mergeEnvironment env =
-      nubBy ((==) `on` fst)
-    . (++ env)
-    . map (\Proc{..} -> (BS.unpack procVar, show procPort))
+    nubBy ((==) `on` fst) . (++ env) . map procPort
 
 readIntfile :: FilePath -> FilePath -> IO [Dep]
 readIntfile cfg tmp = do

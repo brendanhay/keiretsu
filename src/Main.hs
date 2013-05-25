@@ -128,12 +128,12 @@ envs = value . optAll [] $ (optInfo ["env"])
 
 excludes :: Term [String]
 excludes = value . optAll [] $ (optInfo ["exclude"])
-    { optDoc = "Implies --delay"
+    { optDoc = "Implies --delay."
     }
 
 runs :: Term [String]
 runs = value . optAll [] $ (optInfo ["run"])
-    { optDoc = "Implies --delay"
+    { optDoc = "Implies --delay."
     }
 
 force :: Term Bool
@@ -148,7 +148,7 @@ dump = value . flag $ (optInfo ["dump"])
 
 delay :: Term Int
 delay = value . opt 1 $ (optInfo ["delay"])
-    { optDoc = "Delay after dependency start, before forking --run arguments"
+    { optDoc = "Delay after dependency start, before forking --run arguments."
     }
 
 verify :: Term Bool

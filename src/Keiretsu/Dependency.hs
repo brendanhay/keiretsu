@@ -39,7 +39,7 @@ origin :: FilePath -> String -> IO Bool
 origin path uri = do
     p <- doesDirectoryExist path
     if p
-     then eq <$> [sh| cd $path && git config --get remote.origin.uri |]
+     then eq <$> [sh| cd $path && git config --get remote.origin.url |]
      else return False
   where
     eq = (j uri ==) . j

@@ -32,8 +32,6 @@ import qualified System.Process               as P
 bufferSize :: Int
 bufferSize = 32752
 
-Investigate: Posibility of processes getting zombied/orphaned?
-
 runCommands :: Bool -> SignalChan -> [Cmd] -> IO [Async ExitCode]
 runCommands dump chan cmds = do
     (ps, ss) <- unzip <$> mapM runCommand cmds

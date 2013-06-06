@@ -1,123 +1,91 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
 
-module Keiretsu.Process (
-      runCommands
-    ) where
+module Keiretsu.Process (runCommands) where
 
 import Control.Applicative
 import Control.Concurrent
+import Control.Exception (bracket, finally)
 import Control.Concurrent.Async
 import Control.Monad
-import Data.ByteString          (ByteString, hGetSome)
-import Data.List
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
 import Data.Monoid
-import Data.Text                (Text)
 import Keiretsu.Types
-import System.Console.Rainbow
+import Network.Socket
+import System.Console.ANSI
+import System.Directory (removeFile)
 import System.Exit
 import System.IO
-import System.IO.Streams        (InputStream, OutputStream)
-import System.Posix.Signals
-import System.Process           (CreateProcess, ProcessHandle)
-import System.Process.Internals (ProcessHandle__(..), withProcessHandle_)
+import System.IO.Streams (OutputStream)
+import System.Posix.Process ()
+import System.Process
+import qualified System.IO.Streams as Streams
 
-import qualified Data.ByteString.Char8        as BS
-import qualified Data.Text                    as T
-import qualified Data.Text.Encoding           as E
-import qualified System.IO.Streams            as S
-import qualified System.IO.Streams.Concurrent as S
-import qualified System.Process               as P
+type Stdout = OutputStream ByteString
 
-bufferSize :: Int
-bufferSize = 32752
+runCommands :: [Cmd] -> IO ()
+runCommands   [] = return ()
+runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
+    out  <- Streams.lockingOutputStream Streams.stdout
+    pids <- forM (zip colours cmds) $ \(col, exe) -> do
+        prepareSyslog slog col out exe
+        runCmd exe
 
-runCommands :: Bool -> SignalChan -> [Cmd] -> IO [Async ExitCode]
-runCommands dump chan cmds = do
-    (ps, ss) <- unzip <$> mapM runCommand cmds
-    term     <- termFromEnv
+    (_, (p, code)) <- waitProcess pids >>= waitAny
 
-    when dump $ dumpEnv term cmds
+    terminate (filter (/= p) pids)
+    exitWith code
 
-    supplyTerm term ss >>= link
-
-    waitForSignals chan ps
-    mapM (waitForProcess chan) ps
-
-runCommand :: Cmd -> IO (ProcessHandle, InputStream [Chunk])
-runCommand cmd = do
-    (Nothing, Just out, Nothing, pid) <- P.createProcess $ processSettings cmd
-    i <- handleToInput cmd out
-    return (pid, i)
-
-waitForProcess :: SignalChan -> ProcessHandle -> IO (Async ExitCode)
-waitForProcess chan pid =
-    async $ P.waitForProcess pid <* writeChan chan (sigINT, Just pid)
-
-waitForSignals :: SignalChan -> [ProcessHandle] -> IO (Async ())
-waitForSignals chan ps = async . forever $ do
-    (sig, pid) <- readChan chan
-    mapM (signalProcess' sig) $ filter ((pid /=) . Just) ps
-
-signalProcess' :: Signal -> ProcessHandle -> IO ()
-signalProcess' sig pid =
-    withProcessHandle_ pid $ \p -> case p of
-        (ClosedHandle _) -> return p
-        (OpenHandle hd)  -> signalProcess sig hd >> return p
-
-processSettings :: Cmd -> CreateProcess
-processSettings Cmd{..} =
-    (P.shell $ appendRedirect cmdStr)
-        { P.std_out = P.CreatePipe
-        , P.env     = if null cmdEnv then Nothing else Just cmdEnv
-        , P.cwd     = cmdDir
-        }
-
-appendRedirect :: String -> String
-appendRedirect str = if suf `isInfixOf` str then str else str <> suf
+runCmd :: Cmd -> IO ProcessHandle
+runCmd cmd = do
+    handle       <- connectToSyslog
+    (_, _, _, p) <- createProcess (processSettings handle cmd)
+    threadDelay 300000
+    return p
   where
-    suf = " 2>&1"
+    processSettings handle Cmd {..} =
+        (shell cmdStr)
+            { std_out = UseHandle handle
+            , std_err = UseHandle handle
+            , env     = if null cmdEnv then Nothing else Just cmdEnv
+            , cwd     = cmdDir
+            }
 
-handleToInput :: Cmd -> Handle -> IO (InputStream [Chunk])
-handleToInput cmd hd = S.makeInputStream (readBuffer hd >>= f)
-    >>= S.atEndOfInput (hClose hd)
-    >>= S.lockingInputStream
-  where
-    f bs | BS.null bs         = return Nothing
-         | BS.last bs == '\n' = return $! Just $ formatLines cmd bs
-         | otherwise          = readBuffer hd >>= f . (bs <>)
+terminate :: [ProcessHandle] -> IO ()
+terminate = mapM_ terminateProcess
 
-readBuffer :: Handle -> IO ByteString
-readBuffer = (`hGetSome` bufferSize)
+waitProcess :: [ProcessHandle] -> IO [Async (ProcessHandle, ExitCode)]
+waitProcess ps = forM ps $ \p -> async $ (p, ) <$> waitForProcess p
 
-dumpEnv :: Term -> [Cmd] -> IO ()
-dumpEnv term = mapM_ (printChunks term . formatEnv)
+syslogSock :: String
+syslogSock = "keiretsu.syslog"
 
-formatEnv :: Cmd -> [Chunk]
-formatEnv cmd = formatLine cmd ("Environment: " <> T.pack (cmdStr cmd))
-    ++ concatMap f (cmdEnv cmd)
-  where
-    f (k, v) = formatLine cmd $ T.pack k <> ": " <> T.pack v
+openSyslog :: IO Socket
+openSyslog = do
+    logger <- socket AF_UNIX Stream defaultProtocol
+    bind logger (SockAddrUnix syslogSock)
+    listen logger 128
+    return logger
 
-formatLines :: Cmd -> ByteString -> [Chunk]
-formatLines cmd =
-    concatMap (formatLine cmd . E.decodeUtf8) . BS.lines
+closeSyslog :: Socket -> IO ()
+closeSyslog s = close s `finally` removeFile syslogSock
 
-formatLine :: Cmd -> Text -> [Chunk]
-formatLine Cmd{..} txt =
-    [ plain (T.pack cmdPre <> ": ") +.+ cmdColor +.+ bold
-    , plain (txt <> "\n") +.+ cmdColor
-    ]
+connectToSyslog :: IO Handle
+connectToSyslog = do
+    client <- socket AF_UNIX Stream defaultProtocol
+    connect client (SockAddrUnix syslogSock)
+    handle <- socketToHandle client WriteMode
+    hSetBuffering handle LineBuffering
+    return handle
 
-supplyTerm :: Term -> [InputStream [Chunk]] -> IO (Async ())
-supplyTerm term ss =
-    async . join $ S.supply
-        <$> S.concurrentMerge ss
-        <*> termToOutput term
-
-termToOutput :: Term -> IO (OutputStream [Chunk])
-termToOutput term = S.makeOutputStream f >>= S.lockingOutputStream
-  where
-    f Nothing   = return ()
-    f (Just cs) = printChunks term cs
-
+prepareSyslog :: Socket -> Color -> Stdout -> Cmd -> IO ()
+prepareSyslog syslog col out cmd = void . forkIO $ do
+    remote <- accept syslog
+    (i, _) <- Streams.socketToStreams (fst remote)
+    let prefix = pack (cmdPre cmd) <> ": "
+    o <- Streams.unlines out
+    Streams.lines i
+        >>= Streams.map (colourise col . (prefix <>))
+        >>= flip Streams.connect o

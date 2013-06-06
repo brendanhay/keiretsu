@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Keiretsu.Command (
       clean
     , start
@@ -5,28 +7,33 @@ module Keiretsu.Command (
     ) where
 
 import Control.Applicative
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
 import Data.Monoid
 import Keiretsu.Config
 import Keiretsu.Dependency
 import Keiretsu.Process
 import Keiretsu.Types
+import System.Console.ANSI
 import System.Environment
-import System.Exit
-import System.Posix.Signals
+
+import qualified Data.ByteString.Char8 as S
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = readIntfile cfg tmp >>= mapM_ (wipe force)
 
 start :: [FilePath] -> Bool -> IO ()
 start paths fdump = do
-    dep <- makeLocalDep
-    ps  <- readProcfile dep
-    env <- readEnvironments paths ps
+    dep  <- makeLocalDep
+    ps   <- readProcfile dep
+    env  <- readEnvironments paths ps
 
-    forkWait fdump . fst $ makeCmds colors env 0 ps
+    let cmds = makeCmds env 0 ps
+
+    when fdump $ dumpEnv cmds
+    runCommands cmds
 
 integrate :: FilePath
           -> FilePath
@@ -50,38 +57,20 @@ integrate cfg tmp paths runs excls delay fdump fverify fbuild = do
     penv <- readEnvironments paths ps
     lenv <- getEnvironment
 
-    let (disc, cs) = makeCmds colors penv 0 ps
-        (spec, _)  = makeCmds cs (penv ++ lenv) delay ex
-        cmds       = filter ((`notElem` excls) . cmdPre) $ disc ++ spec
+    let disc = makeCmds penv 0 ps
+        spec = makeCmds (penv ++ lenv) delay ex
+        cmds = filter ((`notElem` excls) . cmdPre) $ disc ++ spec
 
-    forkWait fdump cmds
+    when fdump $ dumpEnv cmds
+    runCommands cmds
 
 whenFlag :: Bool -> (a -> IO b) -> [a] -> IO ()
 whenFlag p f = when p . void . mapConcurrently f
 
-forkWait :: Bool -> [Cmd] -> IO ()
-forkWait dump cs = do
-    chan <- handleSignals
-    runCommands dump chan cs >>= exitAfter
+dumpEnv :: [Cmd] -> IO ()
+dumpEnv = mapM_ (mapM_ S.putStrLn) . map formatEnv . zip colours
 
-handleSignals :: IO SignalChan
-handleSignals = do
-    chan <- newChan
-    mapM_ (signalHandler chan)
-        [ sigINT
-        , sigQUIT
-        , sigTERM
-        ]
-    return chan
-
-signalHandler :: SignalChan -> Signal -> IO ()
-signalHandler chan sig =
-    void $ installHandler sig (Catch $ writeChan chan (sig, Nothing)) Nothing
-
-exitAfter :: [Async ExitCode] -> IO ()
-exitAfter asyncs = do
-    (_, code) <- waitAnyCancel asyncs
-    threadDelay 10000
-    putStrLn $ "Exiting with " <> show code <> " ..."
-    putStrLn "Completed."
-    exitWith code
+formatEnv :: (Color, Cmd) -> [ByteString]
+formatEnv (c, x) = map (colourise c) $ "Environment: " <> pack (cmdStr x) : map f (cmdEnv x)
+  where
+    f (k, v) = pack k <> ": " <> pack v

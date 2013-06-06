@@ -4,12 +4,14 @@
 module Keiretsu.Types where
 
 import Control.Concurrent
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
 import Data.Char
 import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Word
-import System.Console.Rainbow
+import System.Console.ANSI
 import System.Directory
 import System.Posix.Signals
 import System.Process
@@ -63,24 +65,11 @@ data Cmd = Cmd
     , cmdDelay :: !Int
     , cmdDir   :: !(Maybe FilePath)
     , cmdEnv   :: !Env
-    , cmdColor :: !ForegroundAll
-    }
+    } deriving Show
 
-colors :: [ForegroundAll]
-colors = cycle
-    [ f_red
-    , f_green
-    , f_yellow
-    , f_blue
-    , f_magenta
-    , f_cyan
-    , f_white
-    ]
-
-makeCmds :: [ForegroundAll] -> Env -> Int -> [Proc] -> ([Cmd], [ForegroundAll])
-makeCmds cs env delay ps = (zipWith mk ps cs', rst)
+makeCmds :: Env -> Int -> [Proc] -> [Cmd]
+makeCmds env delay ps = map mk ps
   where
-    (cs', rst) = splitAt (length ps) cs
     mk Proc{..} = Cmd
         (dirName procPath <> "/" <> procName)
         procCmd
@@ -90,3 +79,11 @@ makeCmds cs env delay ps = (zipWith mk ps cs', rst)
 
 dirName :: FilePath -> String
 dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack
+
+colours :: [Color]
+colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
+
+colourise :: Color -> ByteString -> ByteString
+colourise c s = pack (setSGRCode [SetColor Foreground Vivid c])
+    <> s
+    <> pack (setSGRCode [])

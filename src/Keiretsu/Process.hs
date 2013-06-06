@@ -87,5 +87,5 @@ prepareSyslog syslog col out cmd = void . forkIO $ do
     let prefix = pack (cmdPre cmd) <> ": "
     o <- Streams.unlines out
     Streams.lines i
-        >>= Streams.map (colourise col . (prefix <>))
+        >>= Streams.map (colourise col prefix <>)
         >>= flip Streams.connect o

@@ -22,7 +22,7 @@ verify d = do
 build :: Dep -> IO ()
 build Dep{..} = do
     putStrLn $ "Building " <> depPath <> " ..."
-    void [sh| cd $depPath && make install |]
+    void [sh| cd $depPath && make |]
 
 update :: Dep -> IO ()
 update d@Dep{..} = case depUri of

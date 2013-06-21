@@ -84,9 +84,8 @@ colours :: [Color]
 colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
 
 colourise :: Color -> ByteString -> ByteString -> ByteString
-colourise c x y =
-    pack (setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity BoldIntensity])
-      <> x
-      <> pack (setSGRCode [SetConsoleIntensity NormalIntensity, SetColor Foreground Vivid c])
-      <> y
-      <> pack (setSGRCode [])
+colourise c x y = BS.concat [pack prefix, x, pack suffix, y, pack clear]
+  where
+    prefix = setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity BoldIntensity]
+    suffix = setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity NormalIntensity]
+    clear  = setSGRCode []

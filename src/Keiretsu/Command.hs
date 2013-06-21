@@ -9,15 +9,16 @@ module Keiretsu.Command (
 import Control.Applicative
 import Control.Concurrent.Async
 import Control.Monad
-import Data.ByteString (ByteString)
-import Data.ByteString.Char8 (pack)
+import Data.ByteString          (ByteString)
+import Data.ByteString.Char8    (pack)
 import Data.Monoid
+import System.Console.ANSI
+import System.Environment
+
 import Keiretsu.Config
 import Keiretsu.Dependency
 import Keiretsu.Process
 import Keiretsu.Types
-import System.Console.ANSI
-import System.Environment
 
 import qualified Data.ByteString.Char8 as S
 
@@ -71,6 +72,6 @@ dumpEnv :: [Cmd] -> IO ()
 dumpEnv = mapM_ (mapM_ S.putStrLn) . map formatEnv . zip colours
 
 formatEnv :: (Color, Cmd) -> [ByteString]
-formatEnv (c, x) = map (colourise c) $ "Environment: " <> pack (cmdStr x) : map f (cmdEnv x)
+formatEnv (c, x) = map (colourise c "") $ "Environment: " <> pack (cmdStr x) : map f (cmdEnv x)
   where
     f (k, v) = pack k <> ": " <> pack v

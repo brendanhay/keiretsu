@@ -4,7 +4,7 @@
 module Keiretsu.Types where
 
 import Control.Concurrent
-import Data.ByteString (ByteString)
+import Data.ByteString       (ByteString)
 import Data.ByteString.Char8 (pack)
 import Data.Char
 import Data.List
@@ -83,7 +83,10 @@ dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack
 colours :: [Color]
 colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
 
-colourise :: Color -> ByteString -> ByteString
-colourise c s = pack (setSGRCode [SetColor Foreground Vivid c])
-    <> s
-    <> pack (setSGRCode [])
+colourise :: Color -> ByteString -> ByteString -> ByteString
+colourise c x y =
+    pack (setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity BoldIntensity])
+      <> x
+      <> pack (setSGRCode [SetConsoleIntensity NormalIntensity, SetColor Foreground Vivid c])
+      <> y
+      <> pack (setSGRCode [])

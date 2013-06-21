@@ -6,22 +6,25 @@ module Keiretsu.Process (runCommands) where
 
 import Control.Applicative
 import Control.Concurrent
-import Control.Exception (bracket, finally)
+import Control.Exception        (bracket, finally)
 import Control.Concurrent.Async
 import Control.Monad
-import Data.ByteString (ByteString)
-import Data.ByteString.Char8 (pack)
+import Data.ByteString          (ByteString)
+import Data.ByteString.Char8    (pack)
 import Data.Monoid
-import Keiretsu.Types
 import Network.Socket
 import System.Console.ANSI
-import System.Directory (removeFile)
+import System.Directory         (removeFile)
 import System.Exit
 import System.IO
-import System.IO.Streams (OutputStream)
-import System.Posix.Process ()
+import System.IO.Streams        (OutputStream)
+import System.Posix.Process     ()
 import System.Process
-import qualified System.IO.Streams as Streams
+
+import Keiretsu.Types
+
+import qualified Data.ByteString.Char8 as BS
+import qualified System.IO.Streams     as Streams
 
 type Stdout = OutputStream ByteString
 
@@ -84,8 +87,9 @@ prepareSyslog :: Socket -> Color -> Stdout -> Cmd -> IO ()
 prepareSyslog syslog col out cmd = void . forkIO $ do
     remote <- accept syslog
     (i, _) <- Streams.socketToStreams (fst remote)
-    let prefix = pack (cmdPre cmd) <> ": "
-    o <- Streams.unlines out
+    o      <- Streams.unlines out
     Streams.lines i
-        >>= Streams.map (colourise col prefix <>)
+        >>= Streams.map (colourise col prefix)
         >>= flip Streams.connect o
+  where
+    prefix = pack (cmdPre cmd) <> ": "

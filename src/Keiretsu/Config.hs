@@ -66,7 +66,11 @@ readConfig f path =
     map (\(k, v) -> f (T.unpack k) v) . M.toList <$> loadYaml path
 
 loadYaml :: FilePath -> IO (HashMap Text String)
-loadYaml path = maybe err (return . tmap) =<< Y.decodeFile path
+loadYaml path = do
+    isFile <- doesFileExist path
+    if isFile
+        then maybe err (return . tmap) =<< Y.decodeFile path
+        else return M.empty
   where
     err = error $ "Invalid config file: " <> path
 

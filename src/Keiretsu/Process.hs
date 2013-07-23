@@ -23,8 +23,7 @@ import System.Process
 
 import Keiretsu.Types
 
-import qualified Data.ByteString.Char8 as BS
-import qualified System.IO.Streams     as Streams
+import qualified System.IO.Streams as Streams
 
 type Stdout = OutputStream ByteString
 

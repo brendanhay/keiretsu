@@ -1,15 +1,17 @@
 # Haskell
-cabal-dev
-.configured
+.conf
 *.o
 *.hi
 *.chi
 *.chs.h
+*.imports
+cabal.sandbox.config
 
 # Dirs
+.cabal-sandbox
+bin
 dist
 tmp
-.shelly
 vendor
 
 # CTAGS

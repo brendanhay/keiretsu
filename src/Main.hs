@@ -43,7 +43,7 @@ defineOptions "Start" $ do
     stringsOption "sRuns" "run" []
         "Additional commands to run in the environment."
 
-    intOption "sDelay" "delay" 1
+    intOption "sDelay" "delay" 1000
         "Delay after dependency start, before forking --run arguments."
 
     stringsOption "sExclude" "exclude" []
@@ -69,9 +69,10 @@ main = runCommand $ \opts@Start{..} _ -> runScript $ do
         le <- getEnvironment
         ex <- mapM (makeLocalProc "run") sRuns
 
-        let disc = makeCmds pe 0 ps
-            spec = makeCmds (pe ++ le) sDelay ex
-            cmds = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+        let delay = sDelay * 1000
+            disc  = makeCmds pe delay ps
+            spec  = makeCmds (pe ++ le) delay ex
+            cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
 
         when sDebug $ dumpEnv cmds
         unless sDryRun $ runCommands cmds

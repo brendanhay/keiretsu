@@ -35,10 +35,8 @@ import qualified System.IO.Streams        as Streams
 import           System.Posix.Process     ()
 import           System.Process
 
-type Stdout = OutputStream ByteString
-
 runCommands :: [Cmd] -> IO ()
-runCommands   [] = return ()
+runCommands []   = return ()
 runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
     out  <- Streams.lockingOutputStream Streams.stdout
     pids <- forM (zip colours cmds) $ \(col, exe) -> do
@@ -51,19 +49,19 @@ runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
     exitWith code
 
 runCmd :: Cmd -> IO ProcessHandle
-runCmd cmd = do
-    handle       <- connectToSyslog
-    (_, _, _, p) <- createProcess (processSettings handle cmd)
-    threadDelay 300000
+runCmd Cmd{..} = do
+    hd <- connectToSyslog
+    (_, _, _, p) <- createProcess $ processSettings hd
+    print cmdDelay
+    threadDelay cmdDelay
     return p
   where
-    processSettings handle Cmd {..} =
-        (shell cmdStr)
-            { std_out = UseHandle handle
-            , std_err = UseHandle handle
-            , env     = if null cmdEnv then Nothing else Just cmdEnv
-            , cwd     = cmdDir
-            }
+    processSettings hd = (shell cmdStr)
+        { std_out = UseHandle hd
+        , std_err = UseHandle hd
+        , env     = if null cmdEnv then Nothing else Just cmdEnv
+        , cwd     = cmdDir
+        }
 
 terminate :: [ProcessHandle] -> IO ()
 terminate = mapM_ terminateProcess
@@ -92,7 +90,7 @@ connectToSyslog = do
     hSetBuffering handle LineBuffering
     return handle
 
-prepareSyslog :: Socket -> Color -> Stdout -> Cmd -> IO ()
+prepareSyslog :: Socket -> Color -> OutputStream ByteString -> Cmd -> IO ()
 prepareSyslog syslog col out cmd = void . forkIO $ do
     remote <- accept syslog
     (i, _) <- Streams.socketToStreams (fst remote)

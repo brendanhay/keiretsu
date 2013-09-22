@@ -39,13 +39,13 @@ executable keiretsu
         , ansi-terminal        >= 0.6
         , base                 >  4.5 && < 5
         , bytestring
-        , cmdtheline
         , directory
+        , errors
         , filepath
         , io-streams
+        , options
         , network
         , process
-        , shqq
         , text
         , unix
         , unordered-containers

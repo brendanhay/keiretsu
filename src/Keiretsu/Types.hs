@@ -14,9 +14,9 @@
 
 module Keiretsu.Types where
 
+import           Control.Applicative
 import           Control.Concurrent
 import           Data.ByteString          (ByteString)
-import           Data.ByteString.Char8    (pack)
 import qualified Data.ByteString.Char8    as BS
 import           Data.Char
 import           Data.List
@@ -37,18 +37,15 @@ instance Eq ProcessHandle where
 type Env = [(String, String)]
 
 data Dep = Dep
-    { depPath :: !FilePath
-    , depName :: !String
-    , depUri  :: !(Maybe String)
+    { depName :: !String
+    , depPath :: !FilePath
     } deriving (Eq, Show)
 
-makeDep :: FilePath -> Maybe String -> Maybe String -> Dep
-makeDep path mname = Dep path (fromMaybe (dirName path) mname)
+makeDep :: Maybe String -> FilePath -> Dep
+makeDep name path = Dep (fromMaybe (dirName path) name) path
 
 makeLocalDep :: IO Dep
-makeLocalDep = do
-    dir <- getCurrentDirectory
-    return $ makeDep dir Nothing Nothing
+makeLocalDep = makeDep Nothing <$> getCurrentDirectory
 
 data Proc = Proc
     { procPath :: !FilePath
@@ -64,7 +61,7 @@ makeProc Dep{..} name cmd port =
 makeLocalProc :: String -> String -> IO Proc
 makeLocalProc name cmd = do
     dir <- getCurrentDirectory
-    return $ makeProc (makeDep dir (Just name) Nothing) name cmd 0
+    return $ makeProc (makeDep (Just name) dir) name cmd 0
 
 portVar :: String -> String -> String
 portVar x y = map toUpper $ intercalate "_" [x, y, "PORT"]
@@ -94,8 +91,16 @@ colours :: [Color]
 colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
 
 colourise :: Color -> ByteString -> ByteString -> ByteString
-colourise c x y = BS.concat [pack prefix, x, pack suffix, y, pack clear]
+colourise c x y = BS.concat [prefix, x, suffix, y, clear]
   where
-    prefix = setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity BoldIntensity]
-    suffix = setSGRCode [SetColor Foreground Vivid c, SetConsoleIntensity NormalIntensity]
-    clear  = setSGRCode []
+    prefix = BS.pack $ setSGRCode
+        [ SetColor Foreground Vivid c
+        , SetConsoleIntensity BoldIntensity
+        ]
+
+    suffix = BS.pack $ setSGRCode
+        [ SetColor Foreground Vivid c
+        , SetConsoleIntensity NormalIntensity
+        ]
+
+    clear = BS.pack $ setSGRCode []

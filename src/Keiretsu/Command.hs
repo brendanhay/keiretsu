@@ -20,11 +20,9 @@ import           Control.Applicative
 import           Control.Concurrent.Async
 import           Control.Monad
 import           Data.ByteString          (ByteString)
-import           Data.ByteString.Char8    (pack)
-import qualified Data.ByteString.Char8    as S
+import qualified Data.ByteString.Char8    as BS
 import           Data.Monoid
 import           Keiretsu.Config
-import           Keiretsu.Dependency
 import           Keiretsu.Process
 import           Keiretsu.Types
 import           System.Console.ANSI
@@ -77,9 +75,10 @@ whenFlag :: Bool -> (a -> IO b) -> [a] -> IO ()
 whenFlag p f = when p . void . mapConcurrently f
 
 dumpEnv :: [Cmd] -> IO ()
-dumpEnv = mapM_ (mapM_ S.putStrLn) . map formatEnv . zip colours
+dumpEnv = mapM_ (mapM_ BS.putStrLn) . map formatEnv . zip colours
 
 formatEnv :: (Color, Cmd) -> [ByteString]
-formatEnv (c, x) = map (colourise c "") $ "Environment: " <> pack (cmdStr x) : map f (cmdEnv x)
+formatEnv (c, x) = map (colourise c "") $ "Environment: "
+    <> BS.pack (cmdStr x) : map f (cmdEnv x)
   where
-    f (k, v) = pack k <> ": " <> pack v
+    f (k, v) = BS.pack k <> ": " <> BS.pack v

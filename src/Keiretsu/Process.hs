@@ -22,7 +22,7 @@ import           Control.Concurrent.Async
 import           Control.Exception        (bracket, finally)
 import           Control.Monad
 import           Data.ByteString          (ByteString)
-import           Data.ByteString.Char8    (pack)
+import qualified Data.ByteString.Char8    as BS
 import           Data.Monoid
 import           Keiretsu.Types
 import           Network.Socket
@@ -32,7 +32,7 @@ import           System.Exit
 import           System.IO
 import           System.IO.Streams        (OutputStream)
 import qualified System.IO.Streams        as Streams
-import System.Posix.Process     ()
+import           System.Posix.Process     ()
 import           System.Process
 
 type Stdout = OutputStream ByteString
@@ -101,4 +101,4 @@ prepareSyslog syslog col out cmd = void . forkIO $ do
         >>= Streams.map (colourise col prefix)
         >>= flip Streams.connect o
   where
-    prefix = pack (cmdPre cmd) <> ": "
+    prefix = BS.pack (cmdPre cmd) <> ": "

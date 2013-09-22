@@ -1,23 +1,33 @@
+{-# LANGUAGE RecordWildCards      #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE RecordWildCards #-}
+
+-- Module      : Keiretsu.Types
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 
 module Keiretsu.Types where
 
-import Control.Concurrent
-import Data.ByteString       (ByteString)
-import Data.ByteString.Char8 (pack)
-import Data.Char
-import Data.List
-import Data.Maybe
-import Data.Monoid
-import Data.Word
-import System.Console.ANSI
-import System.Directory
-import System.Posix.Signals
-import System.Process
-import System.Process.Internals
-
-import qualified Data.ByteString.Char8 as BS
+import           Control.Concurrent
+import           Data.ByteString          (ByteString)
+import           Data.ByteString.Char8    (pack)
+import qualified Data.ByteString.Char8    as BS
+import           Data.Char
+import           Data.List
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Word
+import           System.Console.ANSI
+import           System.Directory
+import           System.Posix.Signals
+import           System.Process
+import           System.Process.Internals
 
 type SignalChan = Chan (Signal, Maybe ProcessHandle)
 

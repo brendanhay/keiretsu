@@ -1,27 +1,36 @@
-module Keiretsu.Config (
-      readEnvironments
+-- Module      : Keiretsu.Config
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+
+module Keiretsu.Config
+    ( readEnvironments
     , readIntfile
     , readProcfiles
     , readProcfile
     ) where
 
-import Control.Applicative
-import Control.Arrow
-import Control.Monad
-import Data.HashMap.Strict (HashMap)
-import Data.Function
-import Data.List
-import Data.Monoid
-import Data.Text           (Text)
-import Data.Word
-import Keiretsu.Types
-import Network.Socket
-import System.Directory
-import System.FilePath
-
-import qualified Data.Text           as T
+import           Control.Applicative
+import           Control.Arrow
+import           Control.Monad
+import           Data.Function
+import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as M
+import           Data.List
+import           Data.Monoid
+import           Data.Text           (Text)
+import qualified Data.Text           as T
+import           Data.Word
 import qualified Data.Yaml           as Y
+import           Keiretsu.Types
+import           Network.Socket
+import           System.Directory
+import           System.FilePath
 
 local :: FilePath
 local = "./.env"

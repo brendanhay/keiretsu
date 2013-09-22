@@ -1,26 +1,34 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Keiretsu.Command (
-      clean
+-- Module      : Keiretsu.Command
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+
+module Keiretsu.Command
+    ( clean
     , start
     , integrate
     ) where
 
-import Control.Applicative
-import Control.Concurrent.Async
-import Control.Monad
-import Data.ByteString          (ByteString)
-import Data.ByteString.Char8    (pack)
-import Data.Monoid
-import System.Console.ANSI
-import System.Environment
-
-import Keiretsu.Config
-import Keiretsu.Dependency
-import Keiretsu.Process
-import Keiretsu.Types
-
-import qualified Data.ByteString.Char8 as S
+import           Control.Applicative
+import           Control.Concurrent.Async
+import           Control.Monad
+import           Data.ByteString          (ByteString)
+import           Data.ByteString.Char8    (pack)
+import qualified Data.ByteString.Char8    as S
+import           Data.Monoid
+import           Keiretsu.Config
+import           Keiretsu.Dependency
+import           Keiretsu.Process
+import           Keiretsu.Types
+import           System.Console.ANSI
+import           System.Environment
 
 clean :: FilePath -> FilePath -> Bool -> IO ()
 clean cfg tmp force = readIntfile cfg tmp >>= mapM_ (wipe force)

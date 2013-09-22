@@ -75,7 +75,7 @@ data Cmd = Cmd
     } deriving Show
 
 makeCmds :: Env -> Int -> [Proc] -> [Cmd]
-makeCmds env delay ps = map mk ps
+makeCmds env delay = map mk
   where
     mk Proc{..} = Cmd
         (dirName procPath <> "/" <> procName)

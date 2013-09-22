@@ -74,7 +74,7 @@ main = runCommand $ \opts@Start{..} _ -> runScript $ do
             cmds = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
 
         when sDebug $ dumpEnv cmds
-        when (not sDryRun) $ runCommands cmds
+        unless sDryRun $ runCommands cmds
 
 check :: Start -> Script ()
 check Start{..} = do
@@ -84,10 +84,10 @@ check Start{..} = do
   where
     path m f = do
         p <- scriptIO $ doesFileExist f
-        when (not p) . throwT $ f ++ m
+        unless p . throwT $ f ++ m
 
 dumpEnv :: [Cmd] -> IO ()
-dumpEnv = mapM_ (mapM_ BS.putStrLn) . map formatEnv . zip colours
+dumpEnv = mapM_ (mapM_ BS.putStrLn . formatEnv) . zip colours
 
 formatEnv :: (Color, Cmd) -> [ByteString]
 formatEnv (c, Cmd{..}) = map (colourise c "") $

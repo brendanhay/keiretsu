@@ -26,7 +26,7 @@ and integration testing.
 It allows you to specify dependencies that should be running/available before
 the start of the local application, triggers setup/teardown hooks,
 and applies a shared and consistent environment to all child processes ensuring
-they can discover each other.
+consistent and discoverable configuration.
 
 
 ## Functionality

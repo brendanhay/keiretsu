@@ -36,8 +36,9 @@ executable keiretsu
 
     build-depends:
           async
-        , ansi-terminal        >= 0.6
-        , base                 >  4.5 && < 5
+        , attoparsec
+        , ansi-terminal >= 0.6
+        , base          >  4.5 && < 5
         , bytestring
         , directory
         , errors
@@ -46,7 +47,4 @@ executable keiretsu
         , options
         , network
         , process
-        , text
         , unix
-        , unordered-containers
-        , yaml

@@ -16,15 +16,13 @@ module Keiretsu.Config
 
 import           Control.Applicative
 import           Control.Arrow
-import           Control.Exception   (bracket)
+import           Control.Exception     (bracket)
 import           Control.Monad
+import qualified Data.Attoparsec       as P
+import qualified Data.Attoparsec.Char8 as P8
+import qualified Data.ByteString.Char8 as BS
 import           Data.Function
-import           Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as Map
 import           Data.List
-import           Data.Text           (Text)
-import qualified Data.Text           as Text
-import qualified Data.Yaml           as Yaml
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Directory
@@ -33,10 +31,8 @@ import           System.FilePath
 loadDeps :: FilePath -> IO [Dep]
 loadDeps rel = do
     dir <- canonicalizePath rel
-    withCWD dir $ do
-        let path = dir </> "Intfile"
-        putStrLn $ "Loading " ++ dir ++ " ..."
-        load path =<< doesFileExist path
+    putStrLn $ "Loading " ++ dir ++ " ..."
+    with dir $ let path = dir </> "Intfile" in load path =<< doesFileExist path
   where
     load _    False = return []
     load path True  = do
@@ -45,7 +41,10 @@ loadDeps rel = do
         cs <- concat <$> mapM (loadDeps . depPath) p
         return $! p ++ cs
 
-    dep name path = makeDep (Just name) <$> canonicalizePath path
+    dep name = fmap (makeDep (Just name)) . canonicalizePath
+
+    with path f = bracket getCurrentDirectory setCurrentDirectory
+      (const $ setCurrentDirectory path >> f)
 
 readEnvs :: [Dep] -> [FilePath] -> [Proc] -> IO Env
 readEnvs ds fs ps = do
@@ -54,8 +53,9 @@ readEnvs ds fs ps = do
     return $! merge (parse env) ps
   where
     read' path = putStrLn ("Reading " ++ path ++ " ...") >> readFile path
-    merge env  = nubBy ((==) `on` fst) . (++ env) . map procPort
-    parse      = map (second tail . break (== '=')) . lines . concat
+
+    merge env = nubBy ((==) `on` fst) . (++ env) . map procPort
+    parse     = map (second tail . break (== '=')) . lines . concat
 
 readProcs :: [Dep] -> IO [Proc]
 readProcs = liftM concat . mapM readProcfile
@@ -82,23 +82,9 @@ readProcs = liftM concat . mapM readProcfile
 
 readConfig :: (String -> String -> a) -> FilePath -> IO [a]
 readConfig f path =
-    map (\(k, v) -> f (Text.unpack k) v) . Map.toList <$> loadYAML path
-
-loadYAML :: FilePath -> IO (HashMap Text String)
-loadYAML path = do
-    isFile <- doesFileExist path
-    if isFile
-        then maybe err (return . tmap) =<< Yaml.decodeFile path
-        else return Map.empty
+    either error return . P8.parseOnly parser =<< BS.readFile path
   where
-    err = error $ "Invalid config file: " ++ path
-
-    tmap (Yaml.Object m) = Map.map conv m
-    tmap other           = error $ "Invalid config object: " ++ show other
-
-    conv (Yaml.String t) = Text.unpack t
-    conv other           = show other
-
-withCWD :: FilePath -> IO a -> IO a
-withCWD path f = bracket getCurrentDirectory setCurrentDirectory
-    (const $ setCurrentDirectory path >> f)
+    parser = P.many' $ do
+        k <- P8.takeWhile1 (/= ':') <* P8.char ':' <* P8.takeWhile P8.isSpace
+        v <- P.takeTill P8.isEndOfLine <* P8.endOfLine
+        return $! f (BS.unpack k) (BS.unpack v)

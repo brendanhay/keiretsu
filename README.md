@@ -79,11 +79,12 @@ and `images` would look as follows:
 
 The `Intfile` specifies project dependencies with a `key: value` line based format.
 
-An example `Intfile` which specifies two dependencies Keiretsu should inspect as follows:
+An example `Intfile` for the `proxy` service (from above) which specifies two dependencies on
+`users` and `images`:
 
 ```
-users: ../users_service
-images: ../images_service
+users: ../users
+images: ../images
 ```
 
 This will make Keirestu recurse into those sub-directories and continue looking
@@ -94,7 +95,8 @@ for the various configuration file types.
 Keiretsu uses an identical format to [foreman's](https://github.com/ddollar/foreman) `Procfile`
 to describe processes.
 
-An example `Procfile` specifying both web and redis proctypes:
+An example `Procfile` for the `users` service (from above) specifying both
+web and redis proctypes:
 
 ```
 redis: redis-server --port $PORT
@@ -110,7 +112,18 @@ This will make Keiretsu will start two processes for this dependency.
 
 ### .env
 
-> TODO
+`.env` files are used to supplement the process environment with configuration
+values for a specific dependency.
+
+Again, using the example project layout from above if the `images` service had
+a `.env` file in it's root directory with the following:
+
+```
+IMAGES_TMP: /var/tmp/images-service
+```
+
+The key/value pairs would be loaded into the environment and available to
+all processes.
 
 
 ## Contributing

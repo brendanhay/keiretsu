@@ -56,9 +56,12 @@ main = runCommand $ \opts@Start{..} _ -> runScript $ do
     scriptIO $ do
         d  <- makeLocalDep
         ds <- reverse . (d :) <$> loadDeps sDir
+
         ps <- readProcs ds
+
         pe <- readEnvs ds sEnvs ps
         le <- getEnvironment
+
         ex <- mapM (makeLocalProc "run") sRuns
 
         let delay = sDelay * 1000

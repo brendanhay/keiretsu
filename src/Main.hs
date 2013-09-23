@@ -19,14 +19,12 @@ module Main
 import           Control.Applicative
 import           Control.Error
 import           Control.Monad
-import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Monoid
 import           Keiretsu.Config
 import           Keiretsu.Process
 import           Keiretsu.Types
 import           Options
-import           System.Console.ANSI
 import           System.Directory
 import           System.Environment
 
@@ -88,10 +86,9 @@ check Start{..} = do
         unless p . throwT $ f ++ m
 
 dumpEnv :: [Cmd] -> IO ()
-dumpEnv = mapM_ (mapM_ BS.putStrLn . formatEnv) . zip colours
-
-formatEnv :: (Color, Cmd) -> [ByteString]
-formatEnv (c, Cmd{..}) = map (colourise c "") $
-    BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
+dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
   where
+    format (c, Cmd{..}) = map (colourise c "") $
+        BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
+
     f (k, v) = BS.pack k <> ": " <> BS.pack v

@@ -1,0 +1,56 @@
+-- Module      : Keiretsu.Log
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+
+module Keiretsu.Log where
+
+import           Data.ByteString           (ByteString)
+import qualified Data.ByteString.Char8     as BS
+import           System.Console.ANSI
+import           System.IO
+import           System.Log.Handler.Simple
+import           System.Log.Logger
+
+logName :: String
+logName = "log"
+
+logError, logDebug :: String -> IO ()
+logError = logMsg errorM
+logDebug = logMsg debugM
+
+logMsg :: (String -> a -> IO ()) -> a -> IO ()
+logMsg f = f logName
+
+setLogging :: Bool -> IO ()
+setLogging debug = do
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
+    removeAllHandlers
+    hd <- streamHandler stderr prio
+    updateGlobalLogger logName (setLevel prio . setHandlers [hd])
+  where
+    prio = if debug then DEBUG else INFO
+
+colours :: [Color]
+colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
+
+colourise :: Color -> ByteString -> ByteString -> ByteString
+colourise c x y = BS.concat [prefix, x, suffix, y, clear]
+  where
+    prefix = BS.pack $ setSGRCode
+        [ SetColor Foreground Vivid c
+        , SetConsoleIntensity BoldIntensity
+        ]
+
+    suffix = BS.pack $ setSGRCode
+        [ SetColor Foreground Vivid c
+        , SetConsoleIntensity NormalIntensity
+        ]
+
+    clear = BS.pack $ setSGRCode []

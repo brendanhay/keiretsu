@@ -26,6 +26,7 @@ import           Control.Monad
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString.Char8    as BS
 import           Data.Monoid
+import           Keiretsu.Log
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Console.ANSI
@@ -48,10 +49,9 @@ runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
     pids <- forM (zip colours cmds) $ \(col, exe) -> do
         prepareSyslog slog col out exe
         runCmd exe
-
     (_, (p, code)) <- waitProcess pids >>= waitAny
-
     terminate (filter (/= p) pids)
+    logDebug $ "Exiting with " ++ show code
     exitWith code
 
 runCmd :: Cmd -> IO ProcessHandle
@@ -101,7 +101,5 @@ prepareSyslog syslog col out cmd = void . forkIO $ do
     (i, _) <- Streams.socketToStreams (fst remote)
     o      <- Streams.unlines out
     Streams.lines i
-        >>= Streams.map (colourise col prefix)
+        >>= Streams.map (colourise col $ BS.pack (cmdPre cmd) <> ": ")
         >>= flip Streams.connect o
-  where
-    prefix = BS.pack (cmdPre cmd) <> ": "

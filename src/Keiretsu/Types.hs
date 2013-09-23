@@ -13,14 +13,12 @@
 module Keiretsu.Types where
 
 import           Control.Applicative
-import           Data.ByteString       (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.Char
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Word
-import           System.Console.ANSI
 import           System.Directory
 
 type Env = [(String, String)]
@@ -75,21 +73,3 @@ makeCmds env delay = map mk
 
 dirName :: FilePath -> String
 dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack
-
-colours :: [Color]
-colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
-
-colourise :: Color -> ByteString -> ByteString -> ByteString
-colourise c x y = BS.concat [prefix, x, suffix, y, clear]
-  where
-    prefix = BS.pack $ setSGRCode
-        [ SetColor Foreground Vivid c
-        , SetConsoleIntensity BoldIntensity
-        ]
-
-    suffix = BS.pack $ setSGRCode
-        [ SetColor Foreground Vivid c
-        , SetConsoleIntensity NormalIntensity
-        ]
-
-    clear = BS.pack $ setSGRCode []

@@ -23,6 +23,7 @@ import qualified Data.Attoparsec.Char8 as P8
 import qualified Data.ByteString.Char8 as BS
 import           Data.Function
 import           Data.List
+import           Keiretsu.Log
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Directory
@@ -31,12 +32,12 @@ import           System.FilePath
 loadDeps :: FilePath -> IO [Dep]
 loadDeps rel = do
     dir <- canonicalizePath rel
-    putStrLn $ "Loading " ++ dir ++ " ..."
+    logDebug $ "Loading " ++ dir ++ " ..."
     with dir $ let path = dir </> "Intfile" in load path =<< doesFileExist path
   where
     load _    False = return []
     load path True  = do
-        putStrLn ("Reading " ++ path ++ " ...")
+        logDebug $ "Reading " ++ path ++ " ..."
         p  <- mapM (uncurry dep) =<< readConfig (,) path
         cs <- concat <$> mapM (loadDeps . depPath) p
         return $! p ++ cs
@@ -52,7 +53,7 @@ readEnvs ds fs ps = do
     env   <- mapM read' $ paths ++ fs
     return $! merge (parse env) ps
   where
-    read' path = putStrLn ("Reading " ++ path ++ " ...") >> readFile path
+    read' path = logDebug ("Reading " ++ path ++ " ...") >> readFile path
 
     merge env = nubBy ((==) `on` fst) . (++ env) . map procPort
     parse     = map (second tail . break (== '=')) . lines . concat
@@ -62,7 +63,7 @@ readProcs = liftM concat . mapM readProcfile
   where
     readProcfile d = do
         let cfg = joinPath [depPath d, "Procfile"]
-        putStrLn $ "Reading " ++ cfg ++ " ..."
+        logDebug $ "Reading " ++ cfg ++ " ..."
         xs <- readConfig (makeProc d) cfg
         ys <- freePorts $ length xs
         return $! zipWith ($) xs ys

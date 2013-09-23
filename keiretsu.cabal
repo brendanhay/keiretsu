@@ -41,8 +41,8 @@ executable keiretsu
         , base          >  4.5 && < 5
         , bytestring
         , directory
-        , errors
         , filepath
+        , hslogger
         , io-streams
         , options
         , network

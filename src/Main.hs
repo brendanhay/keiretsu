@@ -17,16 +17,17 @@ module Main
     ) where
 
 import           Control.Applicative
-import           Control.Error
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
 import           Data.Monoid
 import           Keiretsu.Config
+import           Keiretsu.Log
 import           Keiretsu.Process
 import           Keiretsu.Types
 import           Options
 import           System.Directory
 import           System.Environment
+import           System.Exit
 
 defineOptions "Start" $ do
     stringOption "sDir" "dir" "./"
@@ -51,41 +52,46 @@ defineOptions "Start" $ do
         "Print output without starting any processes. (default: false)"
 
 main :: IO ()
-main = runCommand $ \opts@Start{..} _ -> runScript $ do
+main = runCommand $ \opts@Start{..} _ -> do
     check opts
-    scriptIO $ do
-        d  <- makeLocalDep
-        ds <- reverse . (d :) <$> loadDeps sDir
 
-        ps <- readProcs ds
+    setLogging sDebug
 
-        pe <- readEnvs ds sEnvs ps
-        le <- getEnvironment
+    d  <- makeLocalDep
+    ds <- reverse . (d :) <$> loadDeps sDir
 
-        ex <- mapM (makeLocalProc "run") sRuns
+    ps <- readProcs ds
 
-        let delay = sDelay * 1000
-            disc  = makeCmds pe delay ps
-            spec  = makeCmds (pe ++ le) delay ex
-            cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+    pe <- readEnvs ds sEnvs ps
+    le <- getEnvironment
 
-        when sDebug $ dump cmds
-        unless sDryRun $ runCommands cmds
+    ex <- mapM (makeLocalProc "run") sRuns
 
-check :: Start -> Script ()
+    let delay = sDelay * 1000
+        disc  = makeCmds pe delay ps
+        spec  = makeCmds (pe ++ le) delay ex
+        cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+
+    when sDebug $ dumpEnv cmds
+    unless sDryRun $ runCommands cmds
+
+check :: Start -> IO ()
 check Start{..} = do
-    when (0 > sDelay) $ throwT "--delay must be non-negative."
-    when (null sDir) $ throwT "--dir must be specified."
+    when (0 > sDelay) $ throwError "--delay must be non-negative."
+    when (null sDir)  $ throwError "--dir must be specified."
     mapM_ (path " specified by --env doesn't exist.") sEnvs
   where
     path m f = do
-        p <- scriptIO $ doesFileExist f
-        unless p . throwT $ f ++ m
+        p <- doesFileExist f
+        unless p . throwError $ f ++ m
 
-dump :: [Cmd] -> IO ()
-dump = mapM_ (mapM_ BS.putStrLn . format) . zip colours
+dumpEnv :: [Cmd] -> IO ()
+dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
   where
     format (c, Cmd{..}) = map (colourise c "") $
         BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
 
     f (k, v) = BS.pack k <> ": " <> BS.pack v
+
+throwError :: String -> IO ()
+throwError msg = logError msg >> exitFailure

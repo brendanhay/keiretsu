@@ -8,7 +8,7 @@
 * [Configuration](#configuration)
     - [Intfile](#intfile)
     - [Procfile](#procfile)
-    - [.env](#.env)
+    - [.env](#env)
 * [Contributing](#contributing)
 * [Licence](#licence)
 
@@ -38,13 +38,50 @@ cabal install
 There are 3 configuration file formats which Keiretsu will read, controlling
 various aspects such as dependencies, processes, and the environment.
 
+An example for a Haskell project named `proxy` with two dependencies, `users`
+and `images` would look as follows:
+
+```
++ images/
+|   + dist/
+|   |   + build/
+|   |   |   + images/
+|   |   |       + images
+|   + src/
+|   |   + Main.hs
+|   + .env
+|   + Intfile
+|   + Procfile
++ proxy/
+|   + dist/
+|   |   + build/
+|   |   |   + proxy/
+|   |   |       + proxy
+|   + src/
+|   |   + Main.hs
+|   + .env
+|   + Intfile
+|   + Procfile
++ users/
+    + dist/
+    |   + build/
+    |   |   + users/
+    |   |       + users
+    + src/
+    |   + Main.hs
+    + .env
+    + Intfile
+    + Procfile
+```
+
+
 ### Intfile
 
 The `Intfile` specifies project dependencies with a `key: value` line based format.
 
 An example `Intfile` which specifies two dependencies Keiretsu should inspect as follows:
 
-```ruby
+```
 users: ../users_service
 images: ../images_service
 ```
@@ -55,11 +92,11 @@ for the various configuration file types.
 ### Procfile
 
 Keiretsu uses an identical format to [foreman's](https://github.com/ddollar/foreman) `Procfile`
-to describe processes to run.
+to describe processes.
 
 An example `Procfile` specifying both web and redis proctypes:
 
-```ruby
+```
 redis: redis-server --port $PORT
 web: ./dist/build/web/web -p $PORT
 ```

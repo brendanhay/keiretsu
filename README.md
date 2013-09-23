@@ -107,7 +107,6 @@ This will make Keiretsu will start two processes for this dependency.
 
 > Proctypes are simply unique names used to identify the related command within
 > a dependencies' scope.
-
 > Currently multiline proctypes are not supported.
 
 ### .env
@@ -116,7 +115,7 @@ This will make Keiretsu will start two processes for this dependency.
 values for a specific dependency.
 
 Again, using the example project layout from above if the `images` service had
-a `.env` file in it's root directory with the following:
+a `.env` file in the project directory with the following:
 
 ```
 IMAGES_TMP: /var/tmp/images-service

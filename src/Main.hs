@@ -85,6 +85,8 @@ check Start{..} = do
         p <- doesFileExist f
         unless p . throwError $ f ++ m
 
+    throwError s = logError s >> exitFailure
+
 dumpEnv :: [Cmd] -> IO ()
 dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
   where
@@ -92,6 +94,3 @@ dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
         BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
 
     f (k, v) = BS.pack k <> ": " <> BS.pack v
-
-throwError :: String -> IO ()
-throwError msg = logError msg >> exitFailure

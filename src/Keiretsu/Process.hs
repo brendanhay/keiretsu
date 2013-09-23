@@ -1,59 +1,72 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE TupleSections        #-}
 
-module Keiretsu.Process (runCommands) where
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
-import Control.Applicative
-import Control.Concurrent
-import Control.Exception        (bracket, finally)
-import Control.Concurrent.Async
-import Control.Monad
-import Data.ByteString          (ByteString)
-import Data.ByteString.Char8    (pack)
-import Data.Monoid
-import Network.Socket
-import System.Console.ANSI
-import System.Directory         (removeFile)
-import System.Exit
-import System.IO
-import System.IO.Streams        (OutputStream)
-import System.Posix.Process     ()
-import System.Process
+-- Module      : Keiretsu.Process
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
 
-import Keiretsu.Types
+module Keiretsu.Process
+    ( runCommands
+    ) where
 
-import qualified System.IO.Streams as Streams
+import           Control.Applicative
+import           Control.Concurrent
+import           Control.Concurrent.Async
+import           Control.Exception        (bracket, finally)
+import           Control.Monad
+import           Data.ByteString          (ByteString)
+import qualified Data.ByteString.Char8    as BS
+import           Data.Monoid
+import           Keiretsu.Log
+import           Keiretsu.Types
+import           Network.Socket
+import           System.Console.ANSI
+import           System.Directory         (removeFile)
+import           System.Exit
+import           System.IO
+import           System.IO.Streams        (OutputStream)
+import qualified System.IO.Streams        as Streams
+import           System.Posix.Process     ()
+import           System.Process
+import           System.Process.Internals
 
-type Stdout = OutputStream ByteString
+instance Eq ProcessHandle where
+    (ProcessHandle a) == (ProcessHandle b) = a == b
 
 runCommands :: [Cmd] -> IO ()
-runCommands   [] = return ()
+runCommands []   = return ()
 runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
     out  <- Streams.lockingOutputStream Streams.stdout
     pids <- forM (zip colours cmds) $ \(col, exe) -> do
         prepareSyslog slog col out exe
         runCmd exe
-
     (_, (p, code)) <- waitProcess pids >>= waitAny
-
     terminate (filter (/= p) pids)
+    logDebug $ "Exiting with " ++ show code
     exitWith code
 
 runCmd :: Cmd -> IO ProcessHandle
-runCmd cmd = do
-    handle       <- connectToSyslog
-    (_, _, _, p) <- createProcess (processSettings handle cmd)
-    threadDelay 300000
+runCmd Cmd{..} = do
+    hd <- connectToSyslog
+    (_, _, _, p) <- createProcess $ processSettings hd
+    threadDelay cmdDelay
     return p
   where
-    processSettings handle Cmd {..} =
-        (shell cmdStr)
-            { std_out = UseHandle handle
-            , std_err = UseHandle handle
-            , env     = if null cmdEnv then Nothing else Just cmdEnv
-            , cwd     = cmdDir
-            }
+    processSettings hd = (shell cmdStr)
+        { std_out = UseHandle hd
+        , std_err = UseHandle hd
+        , env     = if null cmdEnv then Nothing else Just cmdEnv
+        , cwd     = cmdDir
+        }
 
 terminate :: [ProcessHandle] -> IO ()
 terminate = mapM_ terminateProcess
@@ -82,13 +95,11 @@ connectToSyslog = do
     hSetBuffering handle LineBuffering
     return handle
 
-prepareSyslog :: Socket -> Color -> Stdout -> Cmd -> IO ()
+prepareSyslog :: Socket -> Color -> OutputStream ByteString -> Cmd -> IO ()
 prepareSyslog syslog col out cmd = void . forkIO $ do
     remote <- accept syslog
     (i, _) <- Streams.socketToStreams (fst remote)
     o      <- Streams.unlines out
     Streams.lines i
-        >>= Streams.map (colourise col prefix)
+        >>= Streams.map (colourise col $ BS.pack (cmdPre cmd) <> ": ")
         >>= flip Streams.connect o
-  where
-    prefix = pack (cmdPre cmd) <> ": "

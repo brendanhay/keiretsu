@@ -1,4 +1,0 @@
-:set -isrc
-:set -XOverloadedStrings
-:set -XRecordWildCards
-:set -XScopedTypeVariables

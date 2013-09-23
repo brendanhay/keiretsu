@@ -1,96 +1,98 @@
-module Keiretsu.Config (
-      readEnvironments
-    , readIntfile
-    , readProcfiles
-    , readProcfile
+-- Module      : Keiretsu.Config
+-- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
+-- License     : This Source Code Form is subject to the terms of
+--               the Mozilla Public License, v. 2.0.
+--               A copy of the MPL can be found in the LICENSE file or
+--               you can obtain it at http://mozilla.org/MPL/2.0/.
+-- Maintainer  : Brendan Hay <brendan.g.hay@gmail.com>
+-- Stability   : experimental
+-- Portability : non-portable (GHC extensions)
+
+module Keiretsu.Config
+    ( loadDeps
+    , readEnvs
+    , readProcs
     ) where
 
-import Control.Applicative
-import Control.Arrow
-import Control.Monad
-import Data.HashMap.Strict (HashMap)
-import Data.Function
-import Data.List
-import Data.Monoid
-import Data.Text           (Text)
-import Data.Word
-import Keiretsu.Types
-import Network.Socket
-import System.Directory
-import System.FilePath
+import           Control.Applicative
+import           Control.Arrow
+import           Control.Exception     (bracket)
+import           Control.Monad
+import qualified Data.Attoparsec       as P
+import qualified Data.Attoparsec.Char8 as P8
+import qualified Data.ByteString.Char8 as BS
+import           Data.Function
+import           Data.List
+import qualified Data.Set as Set
+import           Keiretsu.Log
+import           Keiretsu.Types
+import           Network.Socket
+import           System.Directory
+import           System.FilePath
 
-import qualified Data.Text           as T
-import qualified Data.HashMap.Strict as M
-import qualified Data.Yaml           as Y
-
-local :: FilePath
-local = "./.env"
-
-readEnvironments :: [FilePath] -> [Proc] -> IO Env
-readEnvironments paths ps = do
-    p <- doesFileExist local
-    s <- mapM f $ if p then paths ++ [local] else paths
-    return $! mergeEnvironment (parseEnvironment s) ps
+loadDeps :: FilePath -> IO [Dep]
+loadDeps rel = nub <$> loadDeps' Set.empty rel
   where
-    f x = putStrLn ("Reading " <> x <> " ...") >> readFile x
+    loadDeps' memo rel' = do
+        dir <- canonicalizePath rel'
+        let path = dir </> "Intfile"
+        if path `Set.notMember` memo
+            then do
+                logDebug $ "Loading " ++ dir ++ " ..."
+                with dir $ load path memo =<< doesFileExist path
+            else return []
 
-parseEnvironment :: [String] -> Env
-parseEnvironment =
-    map (second tail . break (== '=')) . lines . concat
+    load _ _ False = return []
+    load path memo True = do
+        logDebug $ "Reading " ++ path ++ " ..."
+        p  <- mapM (uncurry dep) =<< readConfig (,) path
+        cs <- concat <$> mapM (loadDeps' (Set.insert path memo) . depPath) p
+        return $! p ++ cs
 
-mergeEnvironment :: Env -> [Proc] -> Env
-mergeEnvironment env =
-    nubBy ((==) `on` fst) . (++ env) . map procPort
+    dep name = fmap (makeDep (Just name)) . canonicalizePath
 
-readIntfile :: FilePath -> FilePath -> IO [Dep]
-readIntfile cfg tmp = do
-    putStrLn $ "Reading " <> cfg <> " ..."
-    readConfig f cfg
+    with path f = bracket getCurrentDirectory setCurrentDirectory
+      (const $ setCurrentDirectory path >> f)
+
+readEnvs :: [Dep] -> [FilePath] -> [Proc] -> IO Env
+readEnvs ds fs ps = do
+    paths <- filterM doesFileExist $ map ((</> ".env") . depPath) ds
+    env   <- mapM read' $ paths ++ fs
+    return $! merge (parse env) ps
   where
-    f k = makeDep (joinPath [tmp, k]) (Just k) . Just
+    read' path = logDebug ("Reading " ++ path ++ " ...") >> readFile path
 
-readProcfiles :: [Dep] -> IO [Proc]
-readProcfiles = liftM concat . mapM readProcfile
+    merge env = nubBy ((==) `on` fst) . (++ env) . map procPort
+    parse     = map (second tail . break (== '=')) . lines . concat
 
-readProcfile :: Dep -> IO [Proc]
-readProcfile d = do
-    putStrLn $ "Reading " <> cfg <> " ..."
-    xs <- readConfig (makeProc d) cfg
-    ys <- freePorts $ length xs
-    return $ zipWith ($) xs ys
+readProcs :: [Dep] -> IO [Proc]
+readProcs = liftM concat . mapM readProcfile
   where
-    cfg = joinPath [depPath d, "Procfile"]
+    readProcfile d = do
+        let cfg = joinPath [depPath d, "Procfile"]
+        logDebug $ "Reading " ++ cfg ++ " ..."
+        xs <- readConfig (makeProc d) cfg
+        ys <- freePorts $ length xs
+        return $! zipWith ($) xs ys
+
+    freePorts n = do
+        ss <- sequence . take n $ repeat assignSocket
+        ps <- mapM ((fromIntegral <$>) . socketPort) ss
+        mapM_ close ss
+        return ps
+
+    assignSocket = do
+        s <- socket AF_INET Stream defaultProtocol
+        a <- inet_addr "127.0.0.1"
+        setSocketOption s NoDelay 0
+        bind s $ SockAddrInet aNY_PORT a
+        return s
 
 readConfig :: (String -> String -> a) -> FilePath -> IO [a]
 readConfig f path =
-    map (\(k, v) -> f (T.unpack k) v) . M.toList <$> loadYaml path
-
-loadYaml :: FilePath -> IO (HashMap Text String)
-loadYaml path = do
-    isFile <- doesFileExist path
-    if isFile
-        then maybe err (return . tmap) =<< Y.decodeFile path
-        else return M.empty
+    either error return . P8.parseOnly parser =<< BS.readFile path
   where
-    err = error $ "Invalid config file: " <> path
-
-    tmap (Y.Object m) = M.map conv m
-    tmap other        = error $ "Invalid config object: " <> show other
-
-    conv (Y.String t) = T.unpack t
-    conv other        = show other
-
-freePorts :: Int -> IO [Word16]
-freePorts n = do
-    ss <- sequence . take n $ repeat assignSocket
-    ps <- mapM ((fromIntegral <$>) . socketPort) ss
-    mapM_ close ss
-    return ps
-
-assignSocket :: IO Socket
-assignSocket = do
-    s <- socket AF_INET Stream defaultProtocol
-    a <- inet_addr "127.0.0.1"
-    setSocketOption s NoDelay 0
-    bind s $ SockAddrInet aNY_PORT a
-    return s
+    parser = P.many' $ do
+        k <- P8.takeWhile1 (/= ':') <* P8.char ':' <* P8.takeWhile P8.isSpace
+        v <- P.takeTill P8.isEndOfLine <* P8.endOfLine
+        return $! f (BS.unpack k) (BS.unpack v)

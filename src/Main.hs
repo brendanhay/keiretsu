@@ -30,31 +30,25 @@ import           System.Environment
 
 defineOptions "Start" $ do
     stringOption "sDir" "dir" "./"
-        "Path to the directory containing the root Intfile."
+        "Path to the directory containing the root Intfile. (default: ./)"
 
     boolOption "sDebug" "debug" False
-        "Show debug output."
+        "Show debug output. (default: false)"
 
     stringsOption "sEnvs" "env" []
-        "Additional .env files to merge into the environment."
+        "Additional .env files to merge into the environment. (default: none)"
 
     stringsOption "sRuns" "run" []
-        "Additional commands to run in the environment."
+        "Additional commands to run in the environment. (default: none)"
 
     intOption "sDelay" "delay" 1000
-        "Delay after dependency start, before forking --run arguments."
+        "Millisecond delay between dependency start. (default 1000)"
 
     stringsOption "sExclude" "exclude" []
-        "Proctypes to exclude."
+        "Name of a proctype to exclude. (default: none)"
 
     boolOption "sDryRun" "dry-run" False
-        "Read, parse and print output without starting any processes."
-
-    boolOption "sColor" "Color" True
-        "Colourise output."
-
-    stringOption "sShell" "shell" "/bin/sh"
-        "Shell to run commands under."
+        "Print output without starting any processes. (default: false)"
 
 main :: IO ()
 main = runCommand $ \opts@Start{..} _ -> runScript $ do
@@ -72,7 +66,7 @@ main = runCommand $ \opts@Start{..} _ -> runScript $ do
             spec  = makeCmds (pe ++ le) delay ex
             cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
 
-        when sDebug $ dumpEnv cmds
+        when sDebug $ dump cmds
         unless sDryRun $ runCommands cmds
 
 check :: Start -> Script ()
@@ -85,8 +79,8 @@ check Start{..} = do
         p <- scriptIO $ doesFileExist f
         unless p . throwT $ f ++ m
 
-dumpEnv :: [Cmd] -> IO ()
-dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
+dump :: [Cmd] -> IO ()
+dump = mapM_ (mapM_ BS.putStrLn . format) . zip colours
   where
     format (c, Cmd{..}) = map (colourise c "") $
         BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv

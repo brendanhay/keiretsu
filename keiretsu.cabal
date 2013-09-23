@@ -1,5 +1,5 @@
 name:                  keiretsu
-version:               0.1.1
+version:               0.2.0
 synopsis:              Process orchestration for development and integration testing
 license:               OtherLicense
 license-file:          LICENSE
@@ -36,17 +36,16 @@ executable keiretsu
 
     build-depends:
           async
-        , ansi-terminal        >= 0.6
-        , base                 >  4.5 && < 5
+        , attoparsec
+        , ansi-terminal >= 0.6
+        , base          >  4.5 && < 5
         , bytestring
-        , cmdtheline
+        , containers    >= 0.5
         , directory
         , filepath
+        , hslogger
         , io-streams
+        , options
         , network
         , process
-        , shqq
-        , text
         , unix
-        , unordered-containers
-        , yaml

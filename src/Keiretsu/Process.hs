@@ -58,7 +58,6 @@ runCmd :: Cmd -> IO ProcessHandle
 runCmd Cmd{..} = do
     hd <- connectToSyslog
     (_, _, _, p) <- createProcess $ processSettings hd
-    print cmdDelay
     threadDelay cmdDelay
     return p
   where

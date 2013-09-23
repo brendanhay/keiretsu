@@ -29,25 +29,9 @@ and applies a shared and consistent environment to all child processes ensuring
 consistent and discoverable configuration.
 
 
-## Functionality
-
-### Development
-
-> TODO
-
-### Integration Testing
-
-> TODO
-
-
-## Compatibility
-
-> TODO
-
-
 ## Installation
 
-A GHC with base libraries `>= 4.5` are required.
+GHC `7.6.2` or later is required to compile Keiretsu.
 
 ```shell
 cabal install
@@ -56,26 +40,41 @@ cabal install
 
 ## Configuration
 
-### Service Under Test
+There are 3 configuration file formats which Keiretsu will read, controlling
+various aspects such as dependencies, processes, and the environment.
 
-#### Intfile
+### Intfile
 
-> TODO
+The `Intfile` specifies project dependencies with a `key: value` line based format.
 
-### Dependencies
+An example `Intfile` which specifies two dependencies Keiretsu should inspect as follows:
 
-#### Procfile
+```ruby
+users: ../users_service
+images: ../images_service
+```
 
-> TODO
+This will make Keirestu recurse into those sub-directories and continue looking
+for the various configuration file types.
 
-#### Makefile
+### Procfile
 
-> TODO
+Keiretsu uses an identical format to [foreman's](https://github.com/ddollar/foreman) `Procfile`
+to describe processes to run.
 
+An example `Procfile` specifying both web and redis proctypes:
 
-## Running
+```ruby
+redis: redis-server --port $PORT
+web: ./dist/build/web/web -p $PORT
+```
 
-> TODO
+This will make Keiretsu will start two processes for this dependency.
+
+> Proctypes are simply unique names used to identify the related command within
+> a dependencies' scope.
+
+> Currently multiline proctypes are not supported.
 
 
 ## Contributing

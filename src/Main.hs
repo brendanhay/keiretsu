@@ -95,4 +95,3 @@ formatEnv (c, Cmd{..}) = map (colourise c "") $
     BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
   where
     f (k, v) = BS.pack k <> ": " <> BS.pack v
-

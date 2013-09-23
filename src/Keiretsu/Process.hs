@@ -1,6 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE TupleSections        #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- Module      : Keiretsu.Process
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -34,6 +36,10 @@ import           System.IO.Streams        (OutputStream)
 import qualified System.IO.Streams        as Streams
 import           System.Posix.Process     ()
 import           System.Process
+import           System.Process.Internals
+
+instance Eq ProcessHandle where
+    (ProcessHandle a) == (ProcessHandle b) = a == b
 
 runCommands :: [Cmd] -> IO ()
 runCommands []   = return ()

@@ -1,6 +1,4 @@
-{-# LANGUAGE RecordWildCards      #-}
-
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- Module      : Keiretsu.Types
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -15,9 +13,8 @@
 module Keiretsu.Types where
 
 import           Control.Applicative
-import           Control.Concurrent
-import           Data.ByteString          (ByteString)
-import qualified Data.ByteString.Char8    as BS
+import           Data.ByteString       (ByteString)
+import qualified Data.ByteString.Char8 as BS
 import           Data.Char
 import           Data.List
 import           Data.Maybe
@@ -25,14 +22,6 @@ import           Data.Monoid
 import           Data.Word
 import           System.Console.ANSI
 import           System.Directory
-import           System.Posix.Signals
-import           System.Process
-import           System.Process.Internals
-
-type SignalChan = Chan (Signal, Maybe ProcessHandle)
-
-instance Eq ProcessHandle where
-    (ProcessHandle a) == (ProcessHandle b) = a == b
 
 type Env = [(String, String)]
 
@@ -70,8 +59,8 @@ data Cmd = Cmd
     { cmdPre   :: !String
     , cmdStr   :: !String
     , cmdDelay :: !Int
-    , cmdDir   :: !(Maybe FilePath)
-    , cmdEnv   :: !Env
+    , cmdDir   :: Maybe FilePath
+    , cmdEnv   :: Env
     } deriving Show
 
 makeCmds :: Env -> Int -> [Proc] -> [Cmd]

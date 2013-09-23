@@ -5,15 +5,10 @@
 ## Table of Contents
 
 * [Introduction](#introduction)
-* [Functionality](#functionality)
-    - [Development](#development)
-    - [Integration Testing](#integration-testing)
-* [Compatibility](#compatibility)
-* [Installation](#installation)
 * [Configuration](#configuration)
-    - [Service Under Test](#service-under-test)
-    - [Dependencies](#dependencies)
-* [Running](#running)
+    - [Intfile](#intfile)
+    - [Procfile](#procfile)
+    - [.env](#.env)
 * [Contributing](#contributing)
 * [Licence](#licence)
 
@@ -75,6 +70,10 @@ This will make Keiretsu will start two processes for this dependency.
 > a dependencies' scope.
 
 > Currently multiline proctypes are not supported.
+
+### .env
+
+> TODO
 
 
 ## Contributing

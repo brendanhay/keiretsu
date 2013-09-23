@@ -23,6 +23,7 @@ import qualified Data.Attoparsec.Char8 as P8
 import qualified Data.ByteString.Char8 as BS
 import           Data.Function
 import           Data.List
+import qualified Data.Set as Set
 import           Keiretsu.Log
 import           Keiretsu.Types
 import           Network.Socket
@@ -30,16 +31,22 @@ import           System.Directory
 import           System.FilePath
 
 loadDeps :: FilePath -> IO [Dep]
-loadDeps rel = do
-    dir <- canonicalizePath rel
-    logDebug $ "Loading " ++ dir ++ " ..."
-    with dir $ let path = dir </> "Intfile" in load path =<< doesFileExist path
+loadDeps rel = nub <$> loadDeps' Set.empty rel
   where
-    load _    False = return []
-    load path True  = do
+    loadDeps' memo rel' = do
+        dir <- canonicalizePath rel'
+        let path = dir </> "Intfile"
+        if path `Set.notMember` memo
+            then do
+                logDebug $ "Loading " ++ dir ++ " ..."
+                with dir $ load path memo =<< doesFileExist path
+            else return []
+
+    load _ _ False = return []
+    load path memo True = do
         logDebug $ "Reading " ++ path ++ " ..."
         p  <- mapM (uncurry dep) =<< readConfig (,) path
-        cs <- concat <$> mapM (loadDeps . depPath) p
+        cs <- concat <$> mapM (loadDeps' (Set.insert path memo) . depPath) p
         return $! p ++ cs
 
     dep name = fmap (makeDep (Just name)) . canonicalizePath

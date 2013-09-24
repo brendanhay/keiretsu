@@ -31,7 +31,7 @@ import           System.Directory
 import           System.FilePath
 
 loadDeps :: FilePath -> IO [Dep]
-loadDeps rel = nub <$> loadDeps' Set.empty rel
+loadDeps rel = loadDeps' Set.empty rel
   where
     loadDeps' memo rel' = do
         dir <- canonicalizePath rel'

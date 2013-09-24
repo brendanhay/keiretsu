@@ -19,6 +19,7 @@ module Main
 import           Control.Applicative
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
+import           Data.List (nub)
 import           Data.Monoid
 import           Keiretsu.Config
 import           Keiretsu.Log
@@ -58,7 +59,7 @@ main = runCommand $ \opts@Start{..} _ -> do
     setLogging sDebug
 
     d  <- makeLocalDep
-    ds <- reverse . (d :) <$> loadDeps sDir
+    ds <- reverse . nub . (d :) <$> loadDeps sDir
 
     ps <- readProcs ds
 

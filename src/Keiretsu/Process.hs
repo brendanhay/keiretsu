@@ -21,7 +21,7 @@ module Keiretsu.Process
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.Async
-import           Control.Exception        (bracket, finally)
+import           Control.Exception        (SomeException, bracket, catch, finally)
 import           Control.Monad
 import           Data.ByteString          (ByteString)
 import qualified Data.ByteString.Char8    as BS
@@ -78,11 +78,16 @@ syslogSock :: String
 syslogSock = "keiretsu.syslog"
 
 openSyslog :: IO Socket
-openSyslog = do
-    logger <- socket AF_UNIX Stream defaultProtocol
-    bind logger (SockAddrUnix syslogSock)
-    listen logger 128
-    return logger
+openSyslog = open `catch` printErr
+  where
+    open = do
+        logger <- socket AF_UNIX Stream defaultProtocol
+        bind logger (SockAddrUnix syslogSock)
+        listen logger 128
+        return logger
+
+    printErr :: SomeException -> a
+    printErr _ = error $ "Unable to open syslog socket '" ++ syslogSock ++ "'"
 
 closeSyslog :: Socket -> IO ()
 closeSyslog s = close s `finally` removeFile syslogSock

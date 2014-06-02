@@ -19,44 +19,78 @@ module Main
 import           Control.Applicative
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
-import           Data.List (nub)
+import           Data.List             (nub)
 import           Data.Monoid
 import           Keiretsu.Config
 import           Keiretsu.Log
 import           Keiretsu.Process
 import           Keiretsu.Types
-import           Options
+import           Options.Applicative
 import           System.Directory
 import           System.Environment
 import           System.Exit
 
-defineOptions "Start" $ do
-    stringOption "sDir" "dir" "./"
-        "Path to the directory containing the root Intfile. (default: ./)"
+data Start = Start
+    { sDir     :: !FilePath
+    , sDebug   :: !Bool
+    , sEnvs    :: [FilePath]
+    , sRuns    :: [String]
+    , sDelay   :: !Int
+    , sExclude :: [FilePath]
+    , sDryRun  :: !Bool
+    }
 
-    boolOption "sDebug" "debug" False
-        "Show debug output. (default: false)"
-
-    stringsOption "sEnvs" "env" []
-        "Additional .env files to merge into the environment. (default: none)"
-
-    stringsOption "sRuns" "run" []
-        "Additional commands to run in the environment. (default: none)"
-
-    intOption "sDelay" "delay" 1000
-        "Millisecond delay between dependency start. (default 1000)"
-
-    stringsOption "sExclude" "exclude" []
-        "Name of a proctype to exclude. (default: none)"
-
-    boolOption "sDryRun" "dry-run" False
-        "Print output without starting any processes. (default: false)"
+start :: Parser Start
+start = Start
+    <$> strOption
+        ( long "dir"
+       <> short 'd'
+       <> metavar "DIR"
+       <> value "./"
+       <> help "Path to the directory containing the root Intfile. (default: ./)"
+        )
+    <*> switch
+        ( long "debug"
+       <> help "Show debug output. (default: false)"
+        )
+    <*> many (strOption
+        ( long "env"
+       <> short 'e'
+       <> metavar "FILE"
+       <> help "Additional .env files to merge into the environment. (default: none)"
+        ))
+    <*> many (strOption
+        ( long "run"
+       <> short 'r'
+       <> metavar "CMD"
+       <> help "Additional commands to run in the environment. (default: none)"
+        ))
+    <*> option
+        ( long "delay"
+       <> short 'n'
+       <> metavar "MS"
+       <> value 1000
+       <> help "Millisecond delay between dependency start. (default 1000)"
+        )
+    <*> many (strOption
+        ( long "exclude"
+       <> short 'x'
+       <> metavar "PROCTYPE"
+       <> help "Name of a proctype to exclude. (default: none)"
+        ))
+    <*> switch
+        ( long "dry-run"
+       <> help "Print output without starting any processes. (default: false)"
+        )
 
 main :: IO ()
-main = runCommand $ \opts@Start{..} _ -> do
-    check opts
+main = do
+    s@Start{..} <- customExecParser
+        (prefs $ showHelpOnError <> columns 100)
+        (info start idm)
 
     setLogging sDebug
+    check s
 
     d  <- makeLocalDep
     ds <- reverse . nub . (d :) <$> loadDeps sDir

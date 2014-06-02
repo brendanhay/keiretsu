@@ -75,7 +75,7 @@ start = Start
     <*> many (strOption
         ( long "exclude"
        <> short 'x'
-       <> metavar "PROCTYPE"
+       <> metavar "PROC"
        <> help "Name of a proctype to exclude. (default: none)"
         ))
     <*> switch

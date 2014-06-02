@@ -40,7 +40,7 @@ import           System.Process
 import           System.Process.Internals
 
 instance Eq ProcessHandle where
-    (ProcessHandle a) == (ProcessHandle b) = a == b
+    (ProcessHandle a _) == (ProcessHandle b _) = a == b
 
 runCommands :: [Cmd] -> IO ()
 runCommands []   = return ()

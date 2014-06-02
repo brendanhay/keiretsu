@@ -47,5 +47,5 @@ executable keiretsu
         , io-streams
         , optparse-applicative == 0.9.*
         , network
-        , process
+        , process              >= 1.2
         , unix

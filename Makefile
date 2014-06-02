@@ -1,15 +1,17 @@
 SHELL := /usr/bin/env bash
-FLAGS := -j --disable-documentation --disable-library-coverage
 
-.PHONY: test lint
+.PHONY: build clean lint
 
-all: build
+all: deps build
 
 build:
 	cabal build $(addprefix -,$(findstring j,$(MAKEFLAGS)))
 
-install: cabal.sandbox.config
-	cabal install $(FLAGS)
+deps: cabal.sandbox.config
+	cabal install -j \
+	 --disable-documentation \
+	 --disable-library-coverage \
+	 --only-dependencies
 
 clean:
 	-rm -rf dist cabal.sandbox.config .cabal-sandbox
@@ -19,4 +21,4 @@ lint:
 	hlint src
 
 cabal.sandbox.config:
-	cabal sandbox init && cabal configure
+	cabal sandbox init

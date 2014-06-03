@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TemplateHaskell   #-}
 
 -- Module      : Main
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -38,6 +37,7 @@ data Start = Start
     , sDelay   :: !Int
     , sExclude :: [FilePath]
     , sDryRun  :: !Bool
+    , sPorts   :: !Int
     }
 
 start :: Parser Start
@@ -70,7 +70,7 @@ start = Start
        <> short 'n'
        <> metavar "MS"
        <> value 1000
-       <> help "Millisecond delay between dependency start. (default 1000)"
+       <> help "Millisecond delay between dependency start. (default: 1000)"
         )
     <*> many (strOption
         ( long "exclude"
@@ -81,6 +81,13 @@ start = Start
     <*> switch
         ( long "dry-run"
        <> help "Print output without starting any processes. (default: false)"
+        )
+    <*> option
+        ( long "ports"
+       <> short 'p'
+       <> metavar "INT"
+       <> value 2
+       <> help "Number of ports to allocate to a single proctype. (default: 2)"
         )
 
 main :: IO ()
@@ -94,26 +101,26 @@ main = do
 
     d  <- makeLocalDep
     ds <- reverse . nub . (d :) <$> loadDeps sDir
-
-    ps <- readProcs ds
-
+    ps <- readProcs sPorts ds
     pe <- readEnvs ds sEnvs ps
     le <- getEnvironment
-
-    ex <- mapM (makeLocalProc "run") sRuns
+    pr <- mapM (makeLocalProc "run") sRuns
 
     let delay = sDelay * 1000
         disc  = makeCmds pe delay ps
-        spec  = makeCmds (pe ++ le) delay ex
+        spec  = makeCmds (pe ++ le) delay pr
         cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+
+    print disc
 
     when sDebug $ dumpEnv cmds
     unless sDryRun $ runCommands cmds
 
 check :: Start -> IO ()
 check Start{..} = do
-    when (0 > sDelay) $ throwError "--delay must be non-negative."
-    when (null sDir)  $ throwError "--dir must be specified."
+    unless (sDelay >= 0) $ throwError "--delay must be non-negative."
+    unless (sPorts >= 1) $ throwError "--ports must be greater-than 0."
+    when (null sDir) $ throwError "--dir must be specified."
     mapM_ (path " specified by --env doesn't exist.") sEnvs
   where
     path m f = do

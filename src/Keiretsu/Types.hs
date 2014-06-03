@@ -13,6 +13,7 @@
 module Keiretsu.Types where
 
 import           Control.Applicative
+import           Control.Arrow
 import qualified Data.ByteString.Char8 as BS
 import           Data.Char
 import           Data.List
@@ -24,8 +25,8 @@ import           System.Directory
 type Env = [(String, String)]
 
 data Dep = Dep
-    { depName :: !String
-    , depPath :: !FilePath
+    { depName :: String
+    , depPath :: FilePath
     } deriving (Eq, Show)
 
 makeDep :: Maybe String -> FilePath -> Dep
@@ -34,28 +35,47 @@ makeDep name path = Dep (fromMaybe (dirName path) name) path
 makeLocalDep :: IO Dep
 makeLocalDep = makeDep Nothing <$> getCurrentDirectory
 
-data Proc = Proc
-    { procPath :: !FilePath
-    , procName :: !String
-    , procCmd  :: !String
-    , procPort :: !(String, String)
+data Port = Port
+    { portLocal  :: String
+    , portRemote :: String
+    , portNumber :: !Word16
     } deriving (Eq, Show)
 
-makeProc :: Dep -> String -> String -> Word16 -> Proc
-makeProc Dep{..} name cmd port =
-    Proc depPath name cmd (portVar depName name, show port)
+data Proc = Proc
+    { procPath  :: FilePath
+    , procName  :: String
+    , procCmd   :: String
+    , procPorts :: [Port]
+    } deriving (Eq, Show)
+
+makeProc :: Dep -> String -> String -> [Word16] -> Proc
+makeProc Dep{..} name cmd = Proc depPath name cmd . zipWith vars portRange
+  where
+    vars n p
+        | n == lower = Port local remote p
+        | otherwise  = let s = show n in Port (local ++ s) (remote ++ s) p
+
+    lower  = head portRange
+    remote = map toUpper $ intercalate "_" [depName, name, local]
+    local  = "PORT"
 
 makeLocalProc :: String -> String -> IO Proc
 makeLocalProc name cmd = do
     dir <- getCurrentDirectory
-    return $ makeProc (makeDep (Just name) dir) name cmd 0
+    return $ makeProc (makeDep (Just name) dir) name cmd [0]
 
-portVar :: String -> String -> String
-portVar x y = map toUpper $ intercalate "_" [x, y, "PORT"]
+localPortEnv :: Proc -> Env
+localPortEnv = map (portLocal &&& show . portNumber) . procPorts
+
+remotePortEnv :: Proc -> Env
+remotePortEnv = map (portRemote &&& show . portNumber) . procPorts
+
+portRange :: [Int]
+portRange = [1..]
 
 data Cmd = Cmd
-    { cmdPre   :: !String
-    , cmdStr   :: !String
+    { cmdPre   :: String
+    , cmdStr   :: String
     , cmdDelay :: !Int
     , cmdDir   :: Maybe FilePath
     , cmdEnv   :: Env
@@ -64,12 +84,13 @@ data Cmd = Cmd
 makeCmds :: Env -> Int -> [Proc] -> [Cmd]
 makeCmds env delay = map mk
   where
-    mk Proc{..} = Cmd
-        (dirName procPath <> "/" <> procName)
-        procCmd
-        delay
-        (Just procPath)
-        (("PORT", snd procPort) : procPort : env)
+    mk p@Proc{..} = Cmd
+        { cmdPre   = dirName procPath <> "/" <> procName
+        , cmdStr   = procCmd
+        , cmdDelay = delay
+        , cmdDir   = Just procPath
+        , cmdEnv   = localPortEnv p ++ env
+        }
 
 dirName :: FilePath -> String
 dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack

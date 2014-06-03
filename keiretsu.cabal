@@ -36,8 +36,8 @@ executable keiretsu
 
     build-depends:
           async
-        , attoparsec
         , ansi-terminal        >= 0.6
+        , attoparsec
         , base                 >  4.6 && < 5
         , bytestring
         , containers
@@ -45,7 +45,7 @@ executable keiretsu
         , filepath
         , hslogger
         , io-streams
-        , optparse-applicative == 0.9.*
         , network
+        , optparse-applicative == 0.9.*
         , process              >= 1.2
         , unix

@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns    #-}
 
 -- Module      : Keiretsu.Types
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -35,23 +36,30 @@ makeLocalDep :: IO Dep
 makeLocalDep = makeDep Nothing <$> getCurrentDirectory
 
 data Proc = Proc
-    { procPath :: !FilePath
-    , procName :: !String
-    , procCmd  :: !String
-    , procPort :: !(String, String)
+    { procPath  :: !FilePath
+    , procName  :: !String
+    , procCmd   :: !String
+    , procPorts :: [(String, String)]
     } deriving (Eq, Show)
 
-makeProc :: Dep -> String -> String -> Word16 -> Proc
-makeProc Dep{..} name cmd port =
-    Proc depPath name cmd (portVar depName name, show port)
+makeProc :: Dep -> String -> String -> [Word16] -> Proc
+makeProc Dep{..} name cmd ports = Proc depPath name cmd
+   . concat
+   $ zipWith (portVars depName name) [0..] ports
 
 makeLocalProc :: String -> String -> IO Proc
 makeLocalProc name cmd = do
     dir <- getCurrentDirectory
-    return $ makeProc (makeDep (Just name) dir) name cmd 0
+    return $ makeProc (makeDep (Just name) dir) name cmd [0]
 
-portVar :: String -> String -> String
-portVar x y = map toUpper $ intercalate "_" [x, y, "PORT"]
+portVars :: String -> String -> Int -> Word16 -> [(String, String)]
+portVars x y n (show -> p)
+    | n == 0    = [(port, p), (fmt name, p)]
+    | otherwise = [(fmt $ name ++ [show n], p)]
+  where
+    fmt  = map toUpper . intercalate "_"
+    name = [x, y, port]
+    port = "PORT"
 
 data Cmd = Cmd
     { cmdPre   :: !String
@@ -65,11 +73,12 @@ makeCmds :: Env -> Int -> [Proc] -> [Cmd]
 makeCmds env delay = map mk
   where
     mk Proc{..} = Cmd
-        (dirName procPath <> "/" <> procName)
-        procCmd
-        delay
-        (Just procPath)
-        (("PORT", snd procPort) : procPort : env)
+        { cmdPre   = dirName procPath <> "/" <> procName
+        , cmdStr   = procCmd
+        , cmdDelay = delay
+        , cmdDir   = Just procPath
+        , cmdEnv   = procPorts ++ env
+        }
 
 dirName :: FilePath -> String
 dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack

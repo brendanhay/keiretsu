@@ -44,7 +44,6 @@ data Proc = Proc
 
 makeProc :: Dep -> String -> String -> [Word16] -> Proc
 makeProc Dep{..} name cmd ports = Proc depPath name cmd
-   . concat
    $ zipWith (portVars depName name) [0..] ports
 
 makeLocalProc :: String -> String -> IO Proc
@@ -52,14 +51,13 @@ makeLocalProc name cmd = do
     dir <- getCurrentDirectory
     return $ makeProc (makeDep (Just name) dir) name cmd [0]
 
-portVars :: String -> String -> Int -> Word16 -> [(String, String)]
+portVars :: String -> String -> Int -> Word16 -> (String, String)
 portVars x y n (show -> p)
-    | n == 0    = [(port, p), (fmt name, p)]
-    | otherwise = [(fmt $ name ++ [show n], p)]
+    | n == 0    = (fmt name, p)
+    | otherwise = (fmt $ name ++ [show n], p)
   where
     fmt  = map toUpper . intercalate "_"
-    name = [x, y, port]
-    port = "PORT"
+    name = [x, y, "PORT"]
 
 data Cmd = Cmd
     { cmdPre   :: !String
@@ -77,8 +75,12 @@ makeCmds env delay = map mk
         , cmdStr   = procCmd
         , cmdDelay = delay
         , cmdDir   = Just procPath
-        , cmdEnv   = procPorts ++ env
+        , cmdEnv   = port procPorts (procPorts ++ env)
         }
+
+    -- FIXME: Brittle approach to finding the process' port.
+    port []      = id
+    port (p : _) = (("PORT", snd p) :)
 
 dirName :: FilePath -> String
 dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack

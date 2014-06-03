@@ -101,18 +101,17 @@ main = do
 
     d  <- makeLocalDep
     ds <- reverse . nub . (d :) <$> loadDeps sDir
-
     ps <- readProcs sPorts ds
-
     pe <- readEnvs ds sEnvs ps
     le <- getEnvironment
-
-    ex <- mapM (makeLocalProc "run") sRuns
+    pr <- mapM (makeLocalProc "run") sRuns
 
     let delay = sDelay * 1000
         disc  = makeCmds pe delay ps
-        spec  = makeCmds (pe ++ le) delay ex
+        spec  = makeCmds (pe ++ le) delay pr
         cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+
+    print disc
 
     when sDebug $ dumpEnv cmds
     unless sDryRun $ runCommands cmds

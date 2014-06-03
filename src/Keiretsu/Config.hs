@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 -- Module      : Keiretsu.Config
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
 -- License     : This Source Code Form is subject to the terms of
@@ -16,14 +18,14 @@ module Keiretsu.Config
 
 import           Control.Applicative
 import           Control.Arrow
-import           Control.Exception     (bracket)
+import           Control.Exception                (bracket)
 import           Control.Monad
-import qualified Data.Attoparsec       as P
-import qualified Data.Attoparsec.Char8 as P8
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.Attoparsec.ByteString       as P
+import qualified Data.Attoparsec.ByteString.Char8 as P8
+import qualified Data.ByteString.Char8            as BS
 import           Data.Function
 import           Data.List
-import qualified Data.Set as Set
+import qualified Data.Set                         as Set
 import           Keiretsu.Log
 import           Keiretsu.Types
 import           Network.Socket
@@ -62,24 +64,22 @@ readEnvs ds fs ps = do
   where
     read' path = logDebug ("Reading " ++ path ++ " ...") >> readFile path
 
-    merge env = nubBy ((==) `on` fst) . (++ env) . map procPort
+    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap remotePortEnv
     parse     = map (second tail . break (== '=')) . lines . concat
 
-readProcs :: [Dep] -> IO [Proc]
-readProcs = liftM concat . mapM readProcfile
+readProcs :: Int -> [Dep] -> IO [Proc]
+readProcs p = liftM concat . mapM readProcfile
   where
     readProcfile d = do
         let cfg = joinPath [depPath d, "Procfile"]
         logDebug $ "Reading " ++ cfg ++ " ..."
         xs <- readConfig (makeProc d) cfg
-        ys <- freePorts $ length xs
+        ys <- freePorts (length xs)
         return $! zipWith ($) xs ys
 
     freePorts n = do
-        ss <- sequence . take n $ repeat assignSocket
-        ps <- mapM ((fromIntegral <$>) . socketPort) ss
-        mapM_ close ss
-        return ps
+        !ss <- replicateM n . sequence $ replicate p assignSocket
+        forM ss . mapM $ \s -> fromIntegral <$> socketPort s <* close s
 
     assignSocket = do
         s <- socket AF_INET Stream defaultProtocol

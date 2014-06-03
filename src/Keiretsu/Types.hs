@@ -53,11 +53,10 @@ makeLocalProc name cmd = do
 
 portVars :: String -> String -> Int -> Word16 -> (String, String)
 portVars x y n (show -> p)
-    | n == 0    = (fmt name, p)
-    | otherwise = (fmt $ name ++ [show n], p)
+    | n == 0    = (name, p)
+    | otherwise = (name ++ show n, p)
   where
-    fmt  = map toUpper . intercalate "_"
-    name = [x, y, "PORT"]
+    name = map toUpper . intercalate "_" $ [x, y, "PORT"]
 
 data Cmd = Cmd
     { cmdPre   :: !String

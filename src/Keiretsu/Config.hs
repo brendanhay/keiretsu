@@ -64,7 +64,7 @@ readEnvs ds fs ps = do
   where
     read' path = logDebug ("Reading " ++ path ++ " ...") >> readFile path
 
-    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap procPorts
+    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap remotePortEnv
     parse     = map (second tail . break (== '=')) . lines . concat
 
 readProcs :: Int -> [Dep] -> IO [Proc]

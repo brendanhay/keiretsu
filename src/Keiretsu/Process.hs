@@ -1,8 +1,8 @@
+{-# LANGUAGE MultiWayIf           #-}
 {-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE TupleSections        #-}
-
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- Module      : Keiretsu.Process
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -15,64 +15,110 @@
 -- Portability : non-portable (GHC extensions)
 
 module Keiretsu.Process
-    ( runCommands
+    ( run
     ) where
 
 import           Control.Applicative
+import           Control.Arrow
 import           Control.Concurrent
 import           Control.Concurrent.Async
-import           Control.Exception        (SomeException, bracket, catch, finally)
+import           Control.Exception         (SomeException, bracket, catch, finally)
 import           Control.Monad
-import           Data.ByteString          (ByteString)
-import qualified Data.ByteString.Char8    as BS
+import           Data.ByteString           (ByteString)
+import           Data.Conduit
+import qualified Data.Conduit.Binary       as Conduit
+import qualified Data.Conduit.List         as Conduit
+import qualified Data.Conduit.Network.Unix as Conduit
 import           Data.Monoid
+import           Data.Text                 (Text)
+import qualified Data.Text                 as Text
+import qualified Data.Text.IO              as Text
 import           Keiretsu.Log
+import           Keiretsu.Orphans          ()
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Console.ANSI
-import           System.Directory         (removeFile)
+import           System.Directory          (removeFile)
 import           System.Exit
 import           System.IO
-import           System.IO.Streams        (OutputStream)
-import qualified System.IO.Streams        as Streams
-import           System.Posix.Process     ()
 import           System.Process
-import           System.Process.Internals
 
-instance Eq ProcessHandle where
-    (ProcessHandle a _) == (ProcessHandle b _) = a == b
+-- FIXME: Check syslog sockets should be GCd
 
-runCommands :: [Cmd] -> IO ()
-runCommands []   = return ()
-runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
-    out  <- Streams.lockingOutputStream Streams.stdout
-    pids <- forM (zip colours cmds) $ \(col, exe) -> do
-        prepareSyslog slog col out exe
-        runCmd exe
-    (_, (p, code)) <- waitProcess pids >>= waitAny
-    terminate (filter (/= p) pids)
-    logDebug $ "Exiting with " ++ show code
-    exitWith code
+data Cmd = Cmd
+    { cmdPrefix :: Text
+    , cmdString :: Text
+    , cmdHd     :: ProcessHandle
+    } deriving (Eq, Show)
 
-runCmd :: Cmd -> IO ProcessHandle
-runCmd Cmd{..} = do
-    hd <- connectToSyslog
-    (_, _, _, p) <- createProcess $ processSettings hd
-    threadDelay cmdDelay
-    return p
+run :: [Proc] -> IO ()
+run [] = return ()
+run ps = bracket openSyslog closeSyslog $ \sock -> do
+    pids   <- foldM (collect sock) [] (zip colours ps)
+    (p, c) <- snd <$> (waitProcesses pids >>= waitAny)
+    exit (filter (/= p) pids) (p, c)
   where
-    processSettings hd = (shell cmdStr)
+    collect sock pids (col, p) =
+        process sock col out p >>=
+            either (exit pids) (return . (: pids))
+
+    out = Conduit.sinkHandle stdout
+
+    exit pids (Cmd{..}, c) = do
+        terminate pids
+        logDebug $ "Exiting with "
+            ++ show c
+            ++ ":\n  "
+            ++ Text.unpack (cmdPrefix <> ": " <> cmdString)
+        exitWith c
+
+process :: Socket
+        -> Color
+        -> Consumer ByteString IO ()
+        -> Proc
+        -> IO (Either (Cmd, ExitCode) Cmd)
+process sock col out Proc{..} = do
+    hd <- connectToSyslog sock col out procPrefix
+    p  <- create hd procCmd
+    case procCheck of
+        Nothing  -> delay >> return (Right p)
+        Just chk -> check p chk procRetry
+  where
+    check o chk n = do
+        hd <- connectToSyslog sock col out (procPrefix <> "/check")
+
+        hPutStrLn hd ("Delaying for " ++ show procDelay ++ "ms ...")
+        delay
+
+        p <- create hd chk
+        c <- waitForProcess (cmdHd p)
+
+        if | c == ExitSuccess -> return (Right o)
+           | n <= 0           -> return (Left (p, c)) `finally` terminate [o]
+           | otherwise        -> check o chk (n - 1)
+
+    create hd cmd = do
+        Text.hPutStrLn hd cmd
+        (_, _, _, p) <- createProcess $ processSettings hd cmd
+        return $! Cmd procPrefix cmd p
+
+    processSettings hd cmd = (shell $ Text.unpack cmd)
         { std_out = UseHandle hd
         , std_err = UseHandle hd
-        , env     = if null cmdEnv then Nothing else Just cmdEnv
-        , cwd     = cmdDir
+        , close_fds = False
+        , env     = if null env then Nothing else Just env
+        , cwd     = Just (depPath procDep)
         }
 
-terminate :: [ProcessHandle] -> IO ()
-terminate = mapM_ terminateProcess
+    env = map (Text.unpack *** Text.unpack) procEnv
 
-waitProcess :: [ProcessHandle] -> IO [Async (ProcessHandle, ExitCode)]
-waitProcess ps = forM ps $ \p -> async $ (p, ) <$> waitForProcess p
+    delay = threadDelay (procDelay * 1000)
+
+terminate :: [Cmd] -> IO ()
+terminate = mapM_ $ \Cmd{..} -> terminateProcess cmdHd <* waitForProcess cmdHd
+
+waitProcesses :: [Cmd] -> IO [Async (Cmd, ExitCode)]
+waitProcesses cs = forM cs $ \c -> async $ (c,) <$> waitForProcess (cmdHd c)
 
 syslogSock :: String
 syslogSock = "keiretsu.syslog"
@@ -81,10 +127,10 @@ openSyslog :: IO Socket
 openSyslog = open `catch` printErr
   where
     open = do
-        logger <- socket AF_UNIX Stream defaultProtocol
-        bind logger (SockAddrUnix syslogSock)
-        listen logger 128
-        return logger
+        l <- socket AF_UNIX Stream defaultProtocol
+        bind l (SockAddrUnix syslogSock)
+        listen l 128
+        return l
 
     printErr :: SomeException -> a
     printErr _ = error $ "Unable to open syslog socket '" ++ syslogSock ++ "'"
@@ -92,19 +138,31 @@ openSyslog = open `catch` printErr
 closeSyslog :: Socket -> IO ()
 closeSyslog s = close s `finally` removeFile syslogSock
 
-connectToSyslog :: IO Handle
-connectToSyslog = do
-    client <- socket AF_UNIX Stream defaultProtocol
-    connect client (SockAddrUnix syslogSock)
-    handle <- socketToHandle client WriteMode
-    hSetBuffering handle LineBuffering
-    return handle
+connectToSyslog :: Socket
+                -> Color
+                -> Consumer ByteString IO ()
+                -> Text
+                -> IO Handle
+connectToSyslog sock col out p = do
+    lock <- newEmptyMVar
+    a    <- async $ prepare lock
 
-prepareSyslog :: Socket -> Color -> OutputStream ByteString -> Cmd -> IO ()
-prepareSyslog syslog col out cmd = void . forkIO $ do
-    remote <- accept syslog
-    (i, _) <- Streams.socketToStreams (fst remote)
-    o      <- Streams.unlines out
-    Streams.lines i
-        >>= Streams.map (colourise col $ BS.pack (cmdPre cmd) <> ": ")
-        >>= flip Streams.connect o
+    link a
+
+    cl <- socket AF_UNIX Stream defaultProtocol
+    connect cl (SockAddrUnix syslogSock)
+
+    hd <- socketToHandle cl WriteMode
+    hSetBuffering hd LineBuffering
+
+    takeMVar lock
+
+    return hd
+  where
+    prepare lock = do
+        s <- fst <$> accept sock <* putMVar lock ()
+        Conduit.sourceSocket s
+            $= Conduit.lines
+            $= Conduit.map (colourise col p)
+            $$ Conduit.map (<> "\n")
+            =$ out

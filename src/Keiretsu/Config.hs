@@ -65,12 +65,12 @@ dependencies = fmap (reverse . nub) . go mempty <=< canonicalizePath
 
     canonicalise d = (\p -> d { depPath = p }) <$> canonicalizePath (depPath d)
 
-proctypes :: Int -> Dep -> IO Dep
+proctypes :: Int -> Dep -> IO [Proc]
 proctypes n d@Dep{..} = do
     logDebug $ "Reading " ++ path ++ " ..."
     fs <- decodeYAML path
     ws <- alloc (length fs)
-    return $! d { depProcs = zipWith proc' fs ws }
+    return $! zipWith proc' fs ws
   where
     path = depPath </> "Procfile"
 
@@ -85,10 +85,10 @@ proctypes n d@Dep{..} = do
         bind s $ SockAddrInet aNY_PORT a
         return s
 
-    proc' f ws = p { procPorts = zipWith ports portRange ws }
+    proc' (($ d) -> p@Proc{..}) ws = p
+        { procPorts = zipWith ports portRange ws
+        }
       where
-        p@Proc{..} = f d
-
         ports i w
             | i == bound = Port local remote w
             | otherwise  =
@@ -99,15 +99,17 @@ proctypes n d@Dep{..} = do
         remote = Text.toUpper $ Text.intercalate "_" [depName, procName, local]
         local  = "PORT"
 
-environment :: [Dep] -> [FilePath] -> IO Env
-environment ds fs = do
-    ps  <- filterM doesFileExist $ map ((</> ".env") . depPath) ds
-    env <- mapM read' $ ps ++ fs
-    return $! merge (parse env) ds
+environment :: [Proc] -> [FilePath] -> IO Env
+environment ps fs = do
+    es  <- filterM doesFileExist $ getEnvFiles ps
+    env <- mapM read' $ es ++ fs
+    return $! merge (parse env) ps
   where
     read' path = logDebug ("Reading " ++ path ++ " ...") >> Text.readFile path
 
-    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap getDepEnv
+    merge env = nubBy ((==) `on` fst)
+        . (++ env)
+        . getRemoteEnv
 
     parse = map (second Text.tail . Text.break (== '='))
         . Text.lines

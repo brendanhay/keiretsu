@@ -92,10 +92,10 @@ main = do
 
     l  <- depLocal
     ds <- (l :) <$> dependencies sDir
-    ps <- map (exclude sExclude) <$> mapM (proctypes sPorts) ds
+    ps <- excludeProcs sExclude . concat <$> mapM (proctypes sPorts) ds
     pe <- environment ps sEnvs
 
-    let cs = map (setDepEnv pe) ps
+    let cs = map (setLocalEnv pe) ps
 
     when sDebug $
         dump cs
@@ -120,11 +120,9 @@ check Start{..} = do
 throwError :: String -> IO ()
 throwError s = logError s >> exitFailure
 
-dump :: [Dep] -> IO ()
-dump = zipWithM_ dep colours . concatMap depProcs
+dump :: [Proc] -> IO ()
+dump = zipWithM_ (\c -> mapM_ BS.putStrLn . format c) colours
   where
-    dep c = mapM_ BS.putStrLn . format c
-
     format c Proc{..} = map (colourise c procPrefix . Text.encodeUtf8)
         $ procCmd : map f procEnv
 

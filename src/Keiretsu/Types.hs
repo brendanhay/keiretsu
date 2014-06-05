@@ -1,7 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE ViewPatterns      #-}
 
 -- Module      : Keiretsu.Types
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -20,6 +18,7 @@ import           Control.Arrow
 import           Control.Monad
 import           Data.Aeson
 import qualified Data.HashMap.Strict as Map
+import           Data.List
 import           Data.Monoid
 import           Data.Text           (Text)
 import qualified Data.Text           as Text
@@ -32,6 +31,27 @@ defaultDelay = 1000
 
 portRange :: [Int]
 portRange = [1..]
+
+data Dep = Dep
+    { depPath  :: FilePath
+    , depName  :: Text
+    } deriving (Show, Eq)
+
+instance FromJSON (Text -> Dep) where
+    parseJSON = fmap Dep . withText "FilePath" (return . Text.unpack)
+
+instance FromJSON [Dep] where
+    parseJSON = withObject "Intfile" $ \o ->
+        forM (Map.toList o) $ \(k, v) ->
+            ($ k) <$> parseJSON v
+
+depLocal :: IO Dep
+depLocal = do
+    d <- getCurrentDirectory
+    return $! Dep d (nameFromDir d)
+
+nameFromDir :: FilePath -> Text
+nameFromDir = Text.pack . takeBaseName
 
 type Env = [(Text, Text)]
 
@@ -47,6 +67,8 @@ getPortEnv f = map (f &&& Text.pack . show . portNumber)
 data Proc = Proc
     { procName   :: Text
     , procCmd    :: Text
+    , procCheck  :: Maybe Text
+    , procDelay  :: !Int
     , procEnv    :: Env
     , procPorts  :: [Port]
     , procPrefix :: Text
@@ -56,46 +78,26 @@ data Proc = Proc
 instance FromJSON [Dep -> Proc] where
     parseJSON = withObject "Procfile" $ \o ->
         forM (Map.toList o) $ \(k, v) -> do
-            f <- Proc k <$> withText "Command" return v <*> pure [] <*> pure []
+            f <- foreman k v <|> keiretsu k v
             return $ \d ->
-                f (nameFromDir (depPath d) <> "/" <> k) d
+                f [] [] (nameFromDir (depPath d) <> "/" <> k) d
+      where
+        keiretsu k = withObject "Keiretsu Format" $ \o ->
+            Proc k <$> o .:  "command"
+                   <*> o .:? "check"
+                   <*> o .:? "delay" .!= defaultDelay
 
-setProcEnv :: Env -> Proc -> Proc
-setProcEnv e p = p { procEnv = getPortEnv portLocal (procPorts p) ++ e }
+        foreman k = withText "Foreman Format" $ \cmd ->
+            return $ Proc k cmd Nothing defaultDelay
 
-data Dep = Dep
-    { depDelay :: !Int
-    , depCheck :: Maybe Text
-    , depPath  :: FilePath
-    , depProcs :: [Proc]
-    , depName  :: Text
-    } deriving (Show, Eq)
+getEnvFiles :: [Proc] -> [FilePath]
+getEnvFiles = nub . map ((</> ".env") . depPath . procDep)
 
-instance FromJSON (Text -> Dep) where
-    parseJSON = withObject "Dependency" $ \o ->
-        Dep <$> o .:? "delay" .!= defaultDelay
-            <*> o .:? "check"
-            <*> o .:  "path"
-            <*> pure []
+setLocalEnv :: Env -> Proc -> Proc
+setLocalEnv e p = p { procEnv = getPortEnv portLocal (procPorts p) ++ e }
 
-instance FromJSON [Dep] where
-    parseJSON = withObject "Intfile" $ \o ->
-        forM (Map.toList o) $ \(k, v) ->
-            ($ k) <$> parseJSON v
+getRemoteEnv :: [Proc] -> Env
+getRemoteEnv = concatMap (getPortEnv portRemote . procPorts)
 
-depLocal :: IO Dep
-depLocal = do
-    d <- getCurrentDirectory
-    return $! Dep defaultDelay Nothing d [] (nameFromDir d)
-
-getDepEnv :: Dep -> Env
-getDepEnv = concatMap (getPortEnv portRemote . procPorts) . depProcs
-
-setDepEnv :: Env -> Dep -> Dep
-setDepEnv e d = d { depProcs = map (setProcEnv e) (depProcs d) }
-
-exclude :: [Text] -> Dep -> Dep
-exclude xs d = d { depProcs = filter ((`notElem` xs) . procPrefix) (depProcs d) }
-
-nameFromDir :: FilePath -> Text
-nameFromDir = Text.pack . takeBaseName
+excludeProcs :: [Text] -> [Proc] -> [Proc]
+excludeProcs xs = filter ((`notElem` xs) . procPrefix)

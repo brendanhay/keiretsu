@@ -28,9 +28,10 @@ import           Data.Conduit
 import qualified Data.Conduit.Binary       as Conduit
 import qualified Data.Conduit.List         as Conduit
 import qualified Data.Conduit.Network.Unix as Conduit
+import           Data.Maybe
 import           Data.Monoid
-import           Data.Text                 (Text)
 import qualified Data.Text                 as Text
+import           Data.Traversable          (sequenceA)
 import           Keiretsu.Log
 import           Keiretsu.Orphans          ()
 import           Keiretsu.Types
@@ -41,35 +42,49 @@ import           System.Exit
 import           System.IO
 import           System.Process
 
-run :: [Dep] -> IO ()
+run :: [Proc] -> IO ()
 run [] = return ()
-run ds = bracket openSyslog closeSyslog $ \slog -> do
+run ps = bracket openSyslog closeSyslog $ \slog -> do
     let out = Conduit.sinkHandle stdout
 
-    pids <- fmap concat . forM (zip ds colours) $ \(Dep{..}, c') ->
-        forM (zip (dropWhile (/= c') colours) depProcs) $ \(c, p) -> do
-            prepareSyslog slog c out p
-            process depDelay depCheck depPath p
+    rs <- forM (zip colours ps) $ \(c, p) ->
+        prepareSyslog slog c out p >> process p
 
-    (_, (p, c)) <- waitProcess pids >>= waitAny
+    let (pids, chks) = unzip rs
+
+    waitAsyncProcess (catMaybes chks)
+        >>= mapM wait
+        >>= check
+
+    (_, (p, c)) <- waitAsyncProcess pids >>= waitAny
 
     terminate (filter (/= p) pids)
 
     logDebug $ "Exiting with " ++ show c
     exitWith c
 
-process :: Int -> Maybe Text -> FilePath -> Proc -> IO ProcessHandle
-process n chk cwd Proc{..} = do
+check :: [(ProcessHandle, ExitCode)] -> IO ()
+check [] = return ()
+check ((_, c) : xs)
+    | c == ExitSuccess = check xs
+    | otherwise        = terminate (map fst xs)
+
+process :: Proc -> IO (ProcessHandle, Maybe ProcessHandle)
+process Proc{..} = do
     hd <- connectToSyslog
-    (_, _, _, p) <- createProcess $ processSettings hd
-    threadDelay n
-    return p
+    (,) <$> (create hd procCmd <* threadDelay procDelay)
+        <*> sequenceA (create hd <$> procCheck)
   where
-    processSettings hd = (shell $ Text.unpack procCmd)
+    create hd cmd = do
+        logDebug $ "Running " ++ show hd ++ " command: " ++ Text.unpack cmd
+        (_, _, _, p) <- createProcess $ processSettings hd cmd
+        return p
+
+    processSettings hd cmd = (shell $ Text.unpack cmd)
         { std_out = UseHandle hd
         , std_err = UseHandle hd
         , env     = if null env then Nothing else Just env
-        , cwd     = Just cwd
+        , cwd     = Just (depPath procDep)
         }
 
     env = map (Text.unpack *** Text.unpack) procEnv
@@ -77,8 +92,8 @@ process n chk cwd Proc{..} = do
 terminate :: [ProcessHandle] -> IO ()
 terminate = mapM_ terminateProcess
 
-waitProcess :: [ProcessHandle] -> IO [Async (ProcessHandle, ExitCode)]
-waitProcess ps = forM ps $ \p -> async $ (p, ) <$> waitForProcess p
+waitAsyncProcess :: [ProcessHandle] -> IO [Async (ProcessHandle, ExitCode)]
+waitAsyncProcess ps = forM ps $ \p -> async $ (p, ) <$> waitForProcess p
 
 syslogSock :: String
 syslogSock = "keiretsu.syslog"

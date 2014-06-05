@@ -37,7 +37,7 @@ executable keiretsu
         , directory
         , filepath
         , hslogger
-        , conduit
+        , conduit              == 1.1.*
         , conduit-extra
         , network
         , optparse-applicative == 0.9.*

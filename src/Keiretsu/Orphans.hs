@@ -17,3 +17,6 @@ import System.Process.Internals
 
 instance Eq ProcessHandle where
     (ProcessHandle a _) == (ProcessHandle b _) = a == b
+
+instance Show ProcessHandle where
+    show _ = "ProcessHandle"

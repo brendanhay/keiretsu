@@ -29,6 +29,9 @@ import           System.FilePath
 defaultDelay :: Int
 defaultDelay = 1000
 
+defaultRetry :: Int
+defaultRetry = 0
+
 portRange :: [Int]
 portRange = [1..]
 
@@ -64,11 +67,15 @@ data Port = Port
 getPortEnv :: (Port -> Text) -> [Port] -> Env
 getPortEnv f = map (f &&& Text.pack . show . portNumber)
 
+newtype Time = Time Int
+    deriving (Eq, Show)
+
 data Proc = Proc
     { procName   :: Text
     , procCmd    :: Text
     , procCheck  :: Maybe Text
     , procDelay  :: !Int
+    , procRetry  :: !Int
     , procEnv    :: Env
     , procPorts  :: [Port]
     , procPrefix :: Text
@@ -86,9 +93,10 @@ instance FromJSON [Dep -> Proc] where
             Proc k <$> o .:  "command"
                    <*> o .:? "check"
                    <*> o .:? "delay" .!= defaultDelay
+                   <*> o .:? "retry" .!= defaultRetry
 
         foreman k = withText "Foreman Format" $ \cmd ->
-            return $ Proc k cmd Nothing defaultDelay
+            return $ Proc k cmd Nothing defaultDelay defaultRetry
 
 getEnvFiles :: [Proc] -> [FilePath]
 getEnvFiles = nub . map ((</> ".env") . depPath . procDep)

@@ -124,7 +124,10 @@ dump :: [Proc] -> IO ()
 dump = zipWithM_ (\c -> mapM_ BS.putStrLn . format c) colours
   where
     format c Proc{..} = map (colourise c procPrefix . Text.encodeUtf8)
-        $ procCmd : map f procEnv
+        $ "command: " <> procCmd
+        : "delay: "   <> Text.pack (show procDelay ++ "ms")
+        : maybe [] (\x -> ["check: " <> x]) procCheck
+       ++ map f procEnv
 
     f (k, v) = k <> ": " <> v
 

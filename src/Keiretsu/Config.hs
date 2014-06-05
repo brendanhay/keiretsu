@@ -1,4 +1,7 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 -- Module      : Keiretsu.Config
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -11,88 +14,104 @@
 -- Portability : non-portable (GHC extensions)
 
 module Keiretsu.Config
-    ( loadDeps
-    , readEnvs
-    , readProcs
-    ) where
+   ( dependencies
+   , proctypes
+   , environment
+   ) where
 
 import           Control.Applicative
 import           Control.Arrow
-import           Control.Exception                (bracket)
+import           Control.Exception     (bracket)
 import           Control.Monad
-import qualified Data.Attoparsec.ByteString       as P
-import qualified Data.Attoparsec.ByteString.Char8 as P8
-import qualified Data.ByteString.Char8            as BS
+import qualified Data.ByteString.Char8 as BS
 import           Data.Function
+import qualified Data.HashSet          as Set
 import           Data.List
-import qualified Data.Set                         as Set
+import           Data.Monoid
+import qualified Data.Text             as Text
+import qualified Data.Text.IO          as Text
+import           Data.Yaml
 import           Keiretsu.Log
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Directory
 import           System.FilePath
 
-loadDeps :: FilePath -> IO [Dep]
-loadDeps = loadDeps' Set.empty
+dependencies :: FilePath -> IO [Dep]
+dependencies = fmap (reverse . nub) . go mempty <=< canonicalizePath
   where
-    loadDeps' memo rel' = do
-        dir <- canonicalizePath rel'
+    go memo dir = do
         let path = dir </> "Intfile"
-        if path `Set.notMember` memo
+        if not (path `Set.member` memo)
             then do
                 logDebug $ "Loading " ++ dir ++ " ..."
-                with dir $ load path memo =<< doesFileExist path
-            else return []
+                p <- doesFileExist path
+                with dir $
+                    load memo path p
+            else do
+                logDebug $ "Already loaded " ++ dir ++ ", skipping."
+                return []
 
-    load _ _ False = return []
-    load path memo True = do
+    with path f =
+        bracket getCurrentDirectory setCurrentDirectory
+            (const $ setCurrentDirectory path >> f)
+
+    load _    _    False = return []
+    load memo path True  = do
         logDebug $ "Reading " ++ path ++ " ..."
-        p  <- mapM (uncurry dep) =<< readConfig (,) path
-        cs <- concat <$> mapM (loadDeps' (Set.insert path memo) . depPath) p
-        return $! p ++ cs
+        xs <- decodeYAML path >>= mapM canonicalise
+        ys <- concat <$> mapM (go (Set.insert path memo) . depPath) xs
+        return $! xs ++ ys
 
-    dep name = fmap (makeDep (Just name)) . canonicalizePath
+    canonicalise d = (\p -> d { depPath = p }) <$> canonicalizePath (depPath d)
 
-    with path f = bracket getCurrentDirectory setCurrentDirectory
-      (const $ setCurrentDirectory path >> f)
-
-readEnvs :: [Dep] -> [FilePath] -> [Proc] -> IO Env
-readEnvs ds fs ps = do
-    paths <- filterM doesFileExist $ map ((</> ".env") . depPath) ds
-    env   <- mapM read' $ paths ++ fs
-    return $! merge (parse env) ps
+proctypes :: Int -> Dep -> IO Dep
+proctypes n d@Dep{..} = do
+    logDebug $ "Reading " ++ path ++ " ..."
+    fs <- decodeYAML path
+    ws <- alloc (length fs)
+    return $! d { depProcs = zipWith proc' fs ws }
   where
-    read' path = logDebug ("Reading " ++ path ++ " ...") >> readFile path
+    path = depPath </> "Procfile"
 
-    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap remotePortEnv
-    parse     = map (second tail . break (== '=')) . lines . concat
-
-readProcs :: Int -> [Dep] -> IO [Proc]
-readProcs p = liftM concat . mapM readProcfile
-  where
-    readProcfile d = do
-        let cfg = joinPath [depPath d, "Procfile"]
-        logDebug $ "Reading " ++ cfg ++ " ..."
-        xs <- readConfig (makeProc d) cfg
-        ys <- freePorts (length xs)
-        return $! zipWith ($) xs ys
-
-    freePorts n = do
-        !ss <- replicateM n . sequence $ replicate p assignSocket
+    alloc m = do
+        !ss <- replicateM m . sequence $ replicate n sock
         forM ss . mapM $ \s -> fromIntegral <$> socketPort s <* close s
 
-    assignSocket = do
+    sock = do
         s <- socket AF_INET Stream defaultProtocol
         a <- inet_addr "127.0.0.1"
         setSocketOption s NoDelay 0
         bind s $ SockAddrInet aNY_PORT a
         return s
 
-readConfig :: (String -> String -> a) -> FilePath -> IO [a]
-readConfig f path =
-    either error return . P8.parseOnly parser =<< BS.readFile path
+    proc' f ws = p { procPorts = zipWith ports portRange ws }
+      where
+        p@Proc{..} = f d
+
+        ports i w
+            | i == bound = Port local remote w
+            | otherwise  =
+                let s = Text.pack (show i)
+                 in Port (local <> s) (remote <> s) w
+
+        bound  = head portRange
+        remote = Text.toUpper $ Text.intercalate "_" [depName, procName, local]
+        local  = "PORT"
+
+environment :: [Dep] -> [FilePath] -> IO Env
+environment ds fs = do
+    ps  <- filterM doesFileExist $ map ((</> ".env") . depPath) ds
+    env <- mapM read' $ ps ++ fs
+    return $! merge (parse env) ds
   where
-    parser = P.many' $ do
-        k <- P8.takeWhile1 (/= ':') <* P8.char ':' <* P8.takeWhile P8.isSpace
-        v <- P.takeTill P8.isEndOfLine <* P8.endOfLine
-        return $! f (BS.unpack k) (BS.unpack v)
+    read' path = logDebug ("Reading " ++ path ++ " ...") >> Text.readFile path
+
+    merge env = nubBy ((==) `on` fst) . (++ env) . concatMap getDepEnv
+
+    parse = map (second Text.tail . Text.break (== '='))
+        . Text.lines
+        . Text.concat
+
+decodeYAML :: FromJSON a => FilePath -> IO a
+decodeYAML = either error return . decodeEither <=< BS.readFile

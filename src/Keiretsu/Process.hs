@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE RecordWildCards      #-}
 {-# LANGUAGE TupleSections        #-}
-
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- Module      : Keiretsu.Process
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -15,58 +14,65 @@
 -- Portability : non-portable (GHC extensions)
 
 module Keiretsu.Process
-    ( runCommands
+    ( run
     ) where
 
 import           Control.Applicative
+import           Control.Arrow
 import           Control.Concurrent
 import           Control.Concurrent.Async
-import           Control.Exception        (SomeException, bracket, catch, finally)
+import           Control.Exception         (SomeException, bracket, catch, finally)
 import           Control.Monad
-import           Data.ByteString          (ByteString)
-import qualified Data.ByteString.Char8    as BS
+import           Data.ByteString           (ByteString)
+import           Data.Conduit
+import qualified Data.Conduit.Binary       as Conduit
+import qualified Data.Conduit.List         as Conduit
+import qualified Data.Conduit.Network.Unix as Conduit
 import           Data.Monoid
+import           Data.Text                 (Text)
+import qualified Data.Text                 as Text
 import           Keiretsu.Log
+import           Keiretsu.Orphans          ()
 import           Keiretsu.Types
 import           Network.Socket
 import           System.Console.ANSI
-import           System.Directory         (removeFile)
+import           System.Directory          (removeFile)
 import           System.Exit
 import           System.IO
-import           System.IO.Streams        (OutputStream)
-import qualified System.IO.Streams        as Streams
-import           System.Posix.Process     ()
 import           System.Process
-import           System.Process.Internals
 
-instance Eq ProcessHandle where
-    (ProcessHandle a _) == (ProcessHandle b _) = a == b
+run :: [Dep] -> IO ()
+run [] = return ()
+run ds = bracket openSyslog closeSyslog $ \slog -> do
+    let out = Conduit.sinkHandle stdout
 
-runCommands :: [Cmd] -> IO ()
-runCommands []   = return ()
-runCommands cmds = bracket openSyslog closeSyslog $ \slog -> do
-    out  <- Streams.lockingOutputStream Streams.stdout
-    pids <- forM (zip colours cmds) $ \(col, exe) -> do
-        prepareSyslog slog col out exe
-        runCmd exe
-    (_, (p, code)) <- waitProcess pids >>= waitAny
+    pids <- fmap concat . forM (zip ds colours) $ \(Dep{..}, c') ->
+        forM (zip (dropWhile (/= c') colours) depProcs) $ \(c, p) -> do
+            prepareSyslog slog c out p
+            process depDelay depCheck depPath p
+
+    (_, (p, c)) <- waitProcess pids >>= waitAny
+
     terminate (filter (/= p) pids)
-    logDebug $ "Exiting with " ++ show code
-    exitWith code
 
-runCmd :: Cmd -> IO ProcessHandle
-runCmd Cmd{..} = do
+    logDebug $ "Exiting with " ++ show c
+    exitWith c
+
+process :: Int -> Maybe Text -> FilePath -> Proc -> IO ProcessHandle
+process n chk cwd Proc{..} = do
     hd <- connectToSyslog
     (_, _, _, p) <- createProcess $ processSettings hd
-    threadDelay cmdDelay
+    threadDelay n
     return p
   where
-    processSettings hd = (shell cmdStr)
+    processSettings hd = (shell $ Text.unpack procCmd)
         { std_out = UseHandle hd
         , std_err = UseHandle hd
-        , env     = if null cmdEnv then Nothing else Just cmdEnv
-        , cwd     = cmdDir
+        , env     = if null env then Nothing else Just env
+        , cwd     = Just cwd
         }
+
+    env = map (Text.unpack *** Text.unpack) procEnv
 
 terminate :: [ProcessHandle] -> IO ()
 terminate = mapM_ terminateProcess
@@ -100,11 +106,11 @@ connectToSyslog = do
     hSetBuffering handle LineBuffering
     return handle
 
-prepareSyslog :: Socket -> Color -> OutputStream ByteString -> Cmd -> IO ()
-prepareSyslog syslog col out cmd = void . forkIO $ do
-    remote <- accept syslog
-    (i, _) <- Streams.socketToStreams (fst remote)
-    o      <- Streams.unlines out
-    Streams.lines i
-        >>= Streams.map (colourise col $ BS.pack (cmdPre cmd) <> ": ")
-        >>= flip Streams.connect o
+prepareSyslog :: Socket -> Color -> Consumer ByteString IO () -> Proc -> IO ()
+prepareSyslog syslog col out p = void . forkIO $ do
+    sock <- fst <$> accept syslog
+    Conduit.sourceSocket sock
+        $= Conduit.lines
+        $= Conduit.map (colourise col (procPrefix p))
+        $$ Conduit.map (<> "\n")
+        =$ out

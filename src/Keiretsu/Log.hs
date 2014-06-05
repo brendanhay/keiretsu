@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- Module      : Keiretsu.Log
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
 -- License     : This Source Code Form is subject to the terms of
@@ -12,6 +14,9 @@ module Keiretsu.Log where
 
 import           Data.ByteString           (ByteString)
 import qualified Data.ByteString.Char8     as BS
+import           Data.Monoid
+import           Data.Text                 (Text)
+import qualified Data.Text.Encoding        as Text
 import           System.Console.ANSI
 import           System.IO
 import           System.Log.Handler.Simple
@@ -38,10 +43,15 @@ setLogging debug = do
     prio = if debug then DEBUG else INFO
 
 colours :: [Color]
-colours = cycle [Red, Green, Cyan, Yellow, Blue, Magenta, Cyan]
+colours = cycle [Red, Green, Blue, White, Magenta, Yellow, Cyan]
 
-colourise :: Color -> ByteString -> ByteString -> ByteString
-colourise c x y = BS.concat [prefix, x, suffix, y, clear]
+colourise :: Color -> Text -> ByteString -> ByteString
+colourise c x y = prefix
+    <> Text.encodeUtf8 x
+    <> suffix
+    <> ": "
+    <> y
+    <> clear
   where
     prefix = BS.pack $ setSGRCode
         [ SetColor Foreground Vivid c

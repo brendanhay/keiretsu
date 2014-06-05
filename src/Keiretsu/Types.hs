@@ -1,4 +1,5 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -- Module      : Keiretsu.Types
 -- Copyright   : (c) 2013 Brendan Hay <brendan.g.hay@gmail.com>
@@ -14,83 +15,97 @@ module Keiretsu.Types where
 
 import           Control.Applicative
 import           Control.Arrow
-import qualified Data.ByteString.Char8 as BS
-import           Data.Char
+import           Control.Monad
+import           Data.Aeson
+import qualified Data.HashMap.Strict as Map
 import           Data.List
-import           Data.Maybe
 import           Data.Monoid
+import           Data.Text           (Text)
+import qualified Data.Text           as Text
 import           Data.Word
 import           System.Directory
+import           System.FilePath
 
-type Env = [(String, String)]
+defaultDelay :: Int
+defaultDelay = 1000
 
-data Dep = Dep
-    { depName :: String
-    , depPath :: FilePath
-    } deriving (Eq, Show)
-
-makeDep :: Maybe String -> FilePath -> Dep
-makeDep name path = Dep (fromMaybe (dirName path) name) path
-
-makeLocalDep :: IO Dep
-makeLocalDep = makeDep Nothing <$> getCurrentDirectory
-
-data Port = Port
-    { portLocal  :: String
-    , portRemote :: String
-    , portNumber :: !Word16
-    } deriving (Eq, Show)
-
-data Proc = Proc
-    { procPath  :: FilePath
-    , procName  :: String
-    , procCmd   :: String
-    , procPorts :: [Port]
-    } deriving (Eq, Show)
-
-makeProc :: Dep -> String -> String -> [Word16] -> Proc
-makeProc Dep{..} name cmd = Proc depPath name cmd . zipWith vars portRange
-  where
-    vars n p
-        | n == lower = Port local remote p
-        | otherwise  = let s = show n in Port (local ++ s) (remote ++ s) p
-
-    lower  = head portRange
-    remote = map toUpper $ intercalate "_" [depName, name, local]
-    local  = "PORT"
-
-makeLocalProc :: String -> String -> IO Proc
-makeLocalProc name cmd = do
-    dir <- getCurrentDirectory
-    return $ makeProc (makeDep (Just name) dir) name cmd [0]
-
-localPortEnv :: Proc -> Env
-localPortEnv = map (portLocal &&& show . portNumber) . procPorts
-
-remotePortEnv :: Proc -> Env
-remotePortEnv = map (portRemote &&& show . portNumber) . procPorts
+defaultRetry :: Int
+defaultRetry = 0
 
 portRange :: [Int]
 portRange = [1..]
 
-data Cmd = Cmd
-    { cmdPre   :: String
-    , cmdStr   :: String
-    , cmdDelay :: !Int
-    , cmdDir   :: Maybe FilePath
-    , cmdEnv   :: Env
-    } deriving Show
+data Dep = Dep
+    { depPath  :: FilePath
+    , depName  :: Text
+    } deriving (Show, Eq)
 
-makeCmds :: Env -> Int -> [Proc] -> [Cmd]
-makeCmds env delay = map mk
-  where
-    mk p@Proc{..} = Cmd
-        { cmdPre   = dirName procPath <> "/" <> procName
-        , cmdStr   = procCmd
-        , cmdDelay = delay
-        , cmdDir   = Just procPath
-        , cmdEnv   = localPortEnv p ++ env
-        }
+instance FromJSON (Text -> Dep) where
+    parseJSON = fmap Dep . withText "FilePath" (return . Text.unpack)
 
-dirName :: FilePath -> String
-dirName = BS.unpack . snd . BS.breakEnd (== '/') . BS.pack
+instance FromJSON [Dep] where
+    parseJSON = withObject "Intfile" $ \o ->
+        forM (Map.toList o) $ \(k, v) ->
+            ($ k) <$> parseJSON v
+
+depLocal :: IO Dep
+depLocal = do
+    d <- getCurrentDirectory
+    return $! Dep d (nameFromDir d)
+
+nameFromDir :: FilePath -> Text
+nameFromDir = Text.pack . takeBaseName
+
+type Env = [(Text, Text)]
+
+data Port = Port
+    { portLocal  :: Text
+    , portRemote :: Text
+    , portNumber :: !Word16
+    } deriving (Eq, Show)
+
+getPortEnv :: (Port -> Text) -> [Port] -> Env
+getPortEnv f = map (f &&& Text.pack . show . portNumber)
+
+newtype Time = Time Int
+    deriving (Eq, Show)
+
+data Proc = Proc
+    { procName   :: Text
+    , procCmd    :: Text
+    , procCheck  :: Maybe Text
+    , procDelay  :: !Int
+    , procRetry  :: !Int
+    , procEnv    :: Env
+    , procPorts  :: [Port]
+    , procPrefix :: Text
+    , procDep    :: Dep
+    } deriving (Show, Eq)
+
+instance FromJSON [Dep -> Proc] where
+    parseJSON = withObject "Procfile" $ \o ->
+        forM (Map.toList o) $ \(k, v) -> do
+            f <- foreman k v <|> keiretsu k v
+            return $ \d ->
+                f [] [] (nameFromDir (depPath d) <> "/" <> k) d
+      where
+        keiretsu k = withObject "Keiretsu Format" $ \o ->
+            Proc k <$> o .:  "command"
+                   <*> o .:? "check"
+                   <*> o .:? "delay" .!= defaultDelay
+                   <*> o .:? "retry" .!= defaultRetry
+
+        foreman k = withText "Foreman Format" $ \cmd ->
+            return $ Proc k cmd Nothing defaultDelay defaultRetry
+
+getEnvFiles :: [Proc] -> [FilePath]
+getEnvFiles = nub . map ((</> ".env") . depPath . procDep)
+
+setLocalEnv :: Env -> Proc -> Proc
+setLocalEnv e p = p { procEnv = getPortEnv portLocal (procPorts p) ++ e }
+
+getRemoteEnv :: [Proc] -> Env
+getRemoteEnv = concatMap (getPortEnv portRemote . procPorts)
+
+excludeProcs :: [Text] -> [Proc] -> [Proc]
+excludeProcs xs = filter ((`notElem` xs) . procPrefix)

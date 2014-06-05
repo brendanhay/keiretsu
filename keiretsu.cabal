@@ -12,7 +12,7 @@ build-type:            Simple
 cabal-version:         >= 1.10
 
 description:
-    Pending
+    Process orchestration for development and integration testing
 
 extra-source-files:
     README.md
@@ -26,26 +26,23 @@ executable keiretsu
     hs-source-dirs:    src
     main-is:           Main.hs
 
-    ghc-options:
-        -threaded
-        -Wall
-        -O2
-        -fwarn-tabs
-        -funbox-strict-fields
-        -with-rtsopts=-N
+    ghc-options:       -Wall -funbox-strict-fields -threaded -with-rtsopts=-N
 
     build-depends:
-          async
+          aeson
+        , async
         , ansi-terminal        >= 0.6
-        , attoparsec
         , base                 >  4.6 && < 5
         , bytestring
-        , containers
         , directory
         , filepath
         , hslogger
-        , io-streams
+        , conduit              == 1.1.*
+        , conduit-extra
         , network
         , optparse-applicative == 0.9.*
         , process              >= 1.2
+        , text
         , unix
+        , unordered-containers
+        , yaml

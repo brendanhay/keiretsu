@@ -18,26 +18,25 @@ module Main
 import           Control.Applicative
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
-import           Data.List             (nub)
 import           Data.Monoid
+import           Data.Text             (Text)
+import qualified Data.Text             as Text
+import qualified Data.Text.Encoding    as Text
 import           Keiretsu.Config
 import           Keiretsu.Log
 import           Keiretsu.Process
 import           Keiretsu.Types
 import           Options.Applicative
 import           System.Directory
-import           System.Environment
 import           System.Exit
 
 data Start = Start
     { sDir     :: !FilePath
-    , sDebug   :: !Bool
     , sEnvs    :: [FilePath]
-    , sRuns    :: [String]
-    , sDelay   :: !Int
-    , sExclude :: [FilePath]
-    , sDryRun  :: !Bool
+    , sExclude :: [Text]
     , sPorts   :: !Int
+    , sDryRun  :: !Bool
+    , sDebug   :: !Bool
     }
 
 start :: Parser Start
@@ -49,45 +48,37 @@ start = Start
        <> value "./"
        <> help "Path to the directory containing the root Intfile. (default: ./)"
         )
-    <*> switch
-        ( long "debug"
-       <> help "Show debug output. (default: false)"
-        )
+
     <*> many (strOption
         ( long "env"
        <> short 'e'
        <> metavar "FILE"
        <> help "Additional .env files to merge into the environment. (default: none)"
         ))
-    <*> many (strOption
-        ( long "run"
-       <> short 'r'
-       <> metavar "CMD"
-       <> help "Additional commands to run in the environment. (default: none)"
-        ))
-    <*> option
-        ( long "delay"
-       <> short 'n'
-       <> metavar "MS"
-       <> value 1000
-       <> help "Millisecond delay between dependency start. (default: 1000)"
-        )
-    <*> many (strOption
+
+    <*> many (textOption
         ( long "exclude"
        <> short 'x'
        <> metavar "PROC"
-       <> help "Name of a proctype to exclude. (default: none)"
+       <> help "Prefixed name of a proctype to exclude. (default: none)"
         ))
-    <*> switch
-        ( long "dry-run"
-       <> help "Print output without starting any processes. (default: false)"
-        )
+
     <*> option
         ( long "ports"
        <> short 'p'
        <> metavar "INT"
        <> value 2
        <> help "Number of ports to allocate to a single proctype. (default: 2)"
+        )
+
+    <*> switch
+        ( long "dry-run"
+       <> help "Print output without starting any processes. (default: false)"
+        )
+
+    <*> switch
+        ( long "debug"
+       <> help "Show debug output. (default: false)"
         )
 
 main :: IO ()
@@ -99,40 +90,46 @@ main = do
     setLogging sDebug
     check s
 
-    d  <- makeLocalDep
-    ds <- reverse . nub . (d :) <$> loadDeps sDir
-    ps <- readProcs sPorts ds
-    pe <- readEnvs ds sEnvs ps
-    le <- getEnvironment
-    pr <- mapM (makeLocalProc "run") sRuns
+    l  <- depLocal
+    ds <- (l :) <$> dependencies sDir
+    ps <- excludeProcs sExclude . concat <$> mapM (proctypes sPorts) ds
+    pe <- environment ps sEnvs
 
-    let delay = sDelay * 1000
-        disc  = makeCmds pe delay ps
-        spec  = makeCmds (pe ++ le) delay pr
-        cmds  = filter ((`notElem` sExclude) . cmdPre) $ disc ++ spec
+    let cs = map (setLocalEnv pe) ps
 
-    print disc
+    when sDebug $
+        dump cs
 
-    when sDebug $ dumpEnv cmds
-    unless sDryRun $ runCommands cmds
+    unless sDryRun $
+        run cs
 
 check :: Start -> IO ()
 check Start{..} = do
-    unless (sDelay >= 0) $ throwError "--delay must be non-negative."
-    unless (sPorts >= 1) $ throwError "--ports must be greater-than 0."
-    when (null sDir) $ throwError "--dir must be specified."
-    mapM_ (path " specified by --env doesn't exist.") sEnvs
+    when (sPorts < 0) $ throwError "--ports must be greater-than 0."
+    when (null sDir)  $ throwError "--dir must be specified."
+
+    d <- doesDirectoryExist sDir
+    unless d . throwError $
+        "Directory " ++ sDir ++ " specified by --dir doesn't exist."
+
+    forM_ sEnvs $ \e -> do
+        f <- doesFileExist e
+        unless f . throwError $
+            "File " ++ e ++ " specified by --env doesn't exist."
+
+throwError :: String -> IO ()
+throwError s = logError s >> exitFailure
+
+dump :: [Proc] -> IO ()
+dump = zipWithM_ (\c -> mapM_ BS.putStrLn . format c) colours
   where
-    path m f = do
-        p <- doesFileExist f
-        unless p . throwError $ f ++ m
+    format c Proc{..} = map (colourise c procPrefix . Text.encodeUtf8)
+        $ "command: " <> procCmd
+        : "delay: "   <> Text.pack (show procDelay ++ "ms")
+        : maybe [] (\x -> ["check: " <> x]) procCheck
+       ++ map f procEnv
 
-    throwError s = logError s >> exitFailure
+    f (k, v) = k <> ": " <> v
 
-dumpEnv :: [Cmd] -> IO ()
-dumpEnv = mapM_ (mapM_ BS.putStrLn . format) . zip colours
-  where
-    format (c, Cmd{..}) = map (colourise c "") $
-        BS.pack cmdPre <> ": " <> BS.pack cmdStr : map f cmdEnv
-
-    f (k, v) = BS.pack k <> ": " <> BS.pack v
+textOption :: Mod OptionFields String -> Parser Text
+textOption = fmap Text.pack . strOption

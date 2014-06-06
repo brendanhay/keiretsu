@@ -79,11 +79,13 @@ runProcess :: Socket
            -> Proc
            -> IO (Either (Cmd, ExitCode) Cmd)
 runProcess sock col out Proc{..} = do
+    when procEphem delay
     c <- connectToSyslog sock col out procPrefix
     p <- create c procCmd
     case procCheck of
-        Nothing  -> delay >> return (Right p)
-        Just chk -> check p chk procRetry
+        Nothing | procEphem -> return (Right p)
+        Nothing             -> delay >> return (Right p)
+        Just chk            -> check p chk procRetry
   where
     check o chk n = do
         (a, hd) <- connectToSyslog sock col out (procPrefix <> "/check")
@@ -113,7 +115,9 @@ runProcess sock col out Proc{..} = do
     delay = threadDelay (procDelay * 1000)
 
 terminate :: [Cmd] -> IO ()
-terminate = mapM_ $ \c -> interruptProcessGroupOf (cmdHd c) >> waitProcess c
+terminate = mapM_ $ \c -> do
+    interruptProcessGroupOf (cmdHd c) `catch` catchError ()
+    waitProcess c
 
 waitProcessAsync :: Cmd -> IO (Async (Cmd, ExitCode))
 waitProcessAsync c@Cmd{..} = async $
@@ -124,7 +128,13 @@ waitProcessAsync c@Cmd{..} = async $
     printError _             = return ()
 
 waitProcess :: Cmd -> IO (Cmd, ExitCode)
-waitProcess p@Cmd{..} = (p,) <$> waitForProcess cmdHd `finally` cancel cmdLog
+waitProcess p@Cmd{..} = (p,) <$>
+    waitForProcess cmdHd
+        `catch` catchError (ExitFailure 123)
+        `finally` cancel cmdLog
+
+catchError :: a -> SomeException -> IO a
+catchError a _ = return a
 
 connectToSyslog :: Socket
                 -> Color

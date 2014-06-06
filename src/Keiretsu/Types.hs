@@ -71,7 +71,8 @@ newtype Time = Time Int
     deriving (Eq, Show)
 
 data Proc = Proc
-    { procName   :: Text
+    { procEphem  :: !Bool
+    , procName   :: Text
     , procCmd    :: Text
     , procCheck  :: Maybe Text
     , procDelay  :: !Int
@@ -90,13 +91,20 @@ instance FromJSON [Dep -> Proc] where
                 f [] [] (nameFromDir (depPath d) <> "/" <> k) d
       where
         keiretsu k = withObject "Keiretsu Format" $ \o ->
-            Proc k <$> o .:  "command"
-                   <*> o .:? "check"
-                   <*> o .:? "delay" .!= defaultDelay
-                   <*> o .:? "retry" .!= defaultRetry
+            Proc False k
+                <$> o .:  "command"
+                <*> o .:? "check"
+                <*> o .:? "delay" .!= defaultDelay
+                <*> o .:? "retry" .!= defaultRetry
 
         foreman k = withText "Foreman Format" $ \cmd ->
-            return $ Proc k cmd Nothing defaultDelay defaultRetry
+            return $ Proc False k cmd Nothing defaultDelay defaultRetry
+
+procLocal :: Dep -> Env -> Int -> Int -> Text -> Proc
+procLocal d e n i c =
+    let t = "run"
+        p = t <> "-" <> Text.pack (show i)
+     in Proc True t c Nothing n defaultRetry e [] p d
 
 getEnvFiles :: [Proc] -> [FilePath]
 getEnvFiles = nub . map ((</> ".env") . depPath . procDep)

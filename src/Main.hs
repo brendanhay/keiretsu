@@ -16,6 +16,7 @@ module Main
     ) where
 
 import           Control.Applicative
+import           Control.Arrow
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
 import           Data.Monoid
@@ -28,11 +29,14 @@ import           Keiretsu.Process
 import           Keiretsu.Types
 import           Options.Applicative
 import           System.Directory
+import           System.Environment
 import           System.Exit
 
 data Start = Start
     { sDir     :: !FilePath
     , sEnvs    :: [FilePath]
+    , sRuns    :: [Text]
+    , sDelay   :: !Int
     , sExclude :: [Text]
     , sPorts   :: !Int
     , sDryRun  :: !Bool
@@ -55,6 +59,21 @@ start = Start
        <> metavar "FILE"
        <> help "Additional .env files to merge into the environment. (default: none)"
         ))
+
+    <*> many (textOption
+        ( long "run"
+       <> short 'r'
+       <> metavar "CMD"
+       <> help "Additional commands to run in the environment. (default: none)"
+        ))
+
+    <*> option
+        ( long "delay"
+       <> short 'n'
+       <> metavar "MS"
+       <> value 1000
+       <> help "Millisecond delay between run commands start. (default: 1000)"
+        )
 
     <*> many (textOption
         ( long "exclude"
@@ -94,14 +113,17 @@ main = do
     ds <- (l :) <$> dependencies sDir
     ps <- excludeProcs sExclude . concat <$> mapM (proctypes sPorts) ds
     pe <- environment ps sEnvs
+    le <- (pe ++) . map (Text.pack *** Text.pack) <$> getEnvironment
 
-    let cs = map (setLocalEnv pe) ps
+    let cs    = map (setLocalEnv pe) ps
+        rs    = zipWith (procLocal l le sDelay) [1..] sRuns
+        procs = cs ++ excludeProcs sExclude rs
 
     when sDebug $
-        dump cs
+        dump procs
 
     unless sDryRun $
-        run cs
+        run procs
 
 check :: Start -> IO ()
 check Start{..} = do

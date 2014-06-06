@@ -25,6 +25,9 @@ import           System.Log.Logger
 logName :: String
 logName = "log"
 
+logDebugBS :: ByteString -> IO ()
+logDebugBS = logDebug . BS.unpack
+
 logError, logDebug :: String -> IO ()
 logError = logMsg errorM
 logDebug = logMsg debugM
@@ -64,3 +67,4 @@ colourise c x y = prefix
         ]
 
     clear = BS.pack $ setSGRCode []
+

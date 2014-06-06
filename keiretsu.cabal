@@ -1,5 +1,5 @@
 name:                  keiretsu
-version:               0.4.0
+version:               0.4.1
 synopsis:              Process orchestration for development and integration testing
 license:               OtherLicense
 license-file:          LICENSE
@@ -41,7 +41,7 @@ executable keiretsu
         , conduit-extra
         , network
         , optparse-applicative == 0.9.*
-        , process              >= 1.2
+        , process              == 1.2.*
         , text
         , unix
         , unordered-containers

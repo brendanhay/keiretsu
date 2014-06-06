@@ -27,7 +27,7 @@ import           System.Directory
 import           System.FilePath
 
 defaultDelay :: Int
-defaultDelay = 1000
+defaultDelay = 10
 
 defaultRetry :: Int
 defaultRetry = 0

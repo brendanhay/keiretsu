@@ -70,7 +70,7 @@ proctypes n d@Dep{..} = do
     logDebug $ "Reading " ++ path ++ " ..."
     fs <- decodeYAML path
     ws <- alloc (length fs)
-    return $! reverse $ zipWith proc' fs ws
+    return $! nub $ reverse $ zipWith proc' fs ws
   where
     path = depPath </> "Procfile"
 

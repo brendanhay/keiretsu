@@ -1,6 +1,4 @@
-## Keiretsu
-
-[![Build Status](https://secure.travis-ci.org/brendanhay/keiretsu.png)](http://travis-ci.org/brendanhay/keiretsu)
+# Keiretsu
 
 ## Table of Contents
 

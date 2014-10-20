@@ -85,7 +85,7 @@ data Proc = Proc
     } deriving (Show)
 
 instance Eq Proc where
-    (==) = on (==) procName
+    (==) = on (==) procPrefix
 
 instance FromJSON [Dep -> Proc] where
     parseJSON = withObject "Procfile" $ \o ->

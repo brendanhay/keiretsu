@@ -93,7 +93,7 @@ start = Start
 
     <*> switch
         ( long "dry-run"
-       <> help "Print output without starting any processes. (default: false)"
+       <> help "Execute the orchestration plan without starting any processes. (default: false)"
         )
 
     <*> switch

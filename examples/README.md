@@ -1,7 +1,6 @@
 # Example
 
-This directory contains a number of contrived srevices that have explicit intertwined
-dependencies.
+This directory contains a number of contrived services that have intertwined dependencies.
 
 Each service will launch it's own redis database, with `web1` and `web2` having a
 circular dependency upon each other, and both depending upon `queue`. `queue`, `web1`, and `web2`

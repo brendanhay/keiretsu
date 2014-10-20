@@ -107,7 +107,7 @@ main = do
         (prefs $ showHelpOnError <> columns 100)
         (info start idm)
 
-    setLogging sDebug
+    setLogging True
     check s
 
     l  <- depLocal

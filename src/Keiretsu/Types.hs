@@ -52,10 +52,7 @@ instance FromJSON [Dep] where
 depLocal :: IO Dep
 depLocal = do
     d <- getCurrentDirectory
-    return $! Dep d (nameFromDir d)
-
-nameFromDir :: FilePath -> Text
-nameFromDir = Text.pack . takeBaseName
+    return $! Dep d (Text.pack (takeBaseName d))
 
 type Env = [(Text, Text)]
 
@@ -92,7 +89,7 @@ instance FromJSON [Dep -> Proc] where
         forM (Map.toList o) $ \(k, v) -> do
             f <- foreman k v <|> keiretsu k v
             return $ \d ->
-                f [] [] (nameFromDir (depPath d) <> "/" <> k) d
+                f [] [] (depName d <> "/" <> k) d
       where
         keiretsu k = withObject "Keiretsu Format" $ \o ->
             Proc False k

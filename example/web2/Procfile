@@ -1,0 +1,2 @@
+redis: redis-server --port $WEB2_REDIS_PORT
+web: while true; do echo "web2 peering $WEB2_WEB_PORT to $WEB1_WEB_PORT ..."; sleep 2; done

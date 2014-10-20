@@ -1,0 +1,2 @@
+redis: redis-server --port $QUEUE_REDIS_PORT
+queue: while true; do echo "queueing jobs $QUEUE_QUEUE_PORT ..."; sleep 2; done

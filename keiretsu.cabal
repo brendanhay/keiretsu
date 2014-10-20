@@ -1,5 +1,5 @@
 name:                  keiretsu
-version:               0.4.2
+version:               0.4.3
 synopsis:              Multi-process orchestration for development and integration testing
 license:               OtherLicense
 license-file:          LICENSE

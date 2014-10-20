@@ -19,6 +19,7 @@ import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad
 import qualified Data.ByteString.Char8 as BS
+import           Data.List
 import           Data.Monoid
 import           Data.Text             (Text)
 import qualified Data.Text             as Text
@@ -67,7 +68,7 @@ start = Start
        <> help "Additional commands to run in the environment. (default: none)"
         ))
 
-    <*> option
+    <*> option auto
         ( long "delay"
        <> short 'n'
        <> metavar "MS"
@@ -82,7 +83,7 @@ start = Start
        <> help "Prefixed name of a proctype to exclude. (default: none)"
         ))
 
-    <*> option
+    <*> option auto
         ( long "ports"
        <> short 'p'
        <> metavar "INT"
@@ -111,7 +112,7 @@ main = do
 
     l  <- depLocal
     ds <- (l :) <$> dependencies sDir
-    ps <- excludeProcs sExclude . concat <$> mapM (proctypes sPorts) ds
+    ps <- nub . excludeProcs sExclude . concat <$> mapM (proctypes sPorts) ds
     pe <- environment ps sEnvs
     le <- (pe ++) . map (Text.pack *** Text.pack) <$> getEnvironment
 

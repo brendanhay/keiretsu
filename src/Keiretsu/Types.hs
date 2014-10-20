@@ -17,6 +17,7 @@ import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad
 import           Data.Aeson
+import           Data.Function
 import qualified Data.HashMap.Strict as Map
 import           Data.List
 import           Data.Monoid
@@ -81,7 +82,10 @@ data Proc = Proc
     , procPorts  :: [Port]
     , procPrefix :: Text
     , procDep    :: Dep
-    } deriving (Show, Eq)
+    } deriving (Show)
+
+instance Eq Proc where
+    (==) = on (==) procName
 
 instance FromJSON [Dep -> Proc] where
     parseJSON = withObject "Procfile" $ \o ->

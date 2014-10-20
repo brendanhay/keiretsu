@@ -46,7 +46,7 @@ setLogging debug = do
     prio = if debug then DEBUG else INFO
 
 colours :: [Color]
-colours = cycle [Red, Green, Blue, White, Magenta, Yellow, Cyan]
+colours = cycle [Red, Green, Blue, Magenta, Yellow, Cyan]
 
 colourise :: Color -> Text -> ByteString -> ByteString
 colourise c x y = prefix

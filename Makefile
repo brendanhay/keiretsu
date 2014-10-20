@@ -2,12 +2,12 @@ SHELL := /usr/bin/env bash
 
 .PHONY: build clean lint
 
-all: deps build
+all: install build
 
 build:
 	cabal build $(addprefix -,$(findstring j,$(MAKEFLAGS)))
 
-deps: cabal.sandbox.config
+install: cabal.sandbox.config
 	cabal install -j \
 	 --disable-documentation \
 	 --disable-library-coverage \

@@ -7,7 +7,7 @@ all: deps build
 build:
 	cabal build $(addprefix -,$(findstring j,$(MAKEFLAGS)))
 
-deps: cabal.sandbox.config
+install: cabal.sandbox.config
 	cabal install -j \
 	 --disable-documentation \
 	 --disable-library-coverage \

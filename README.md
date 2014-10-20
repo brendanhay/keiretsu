@@ -20,8 +20,8 @@ and integration testing.
 
 It allows you to specify dependencies that should be running/available before
 the start of the local application, triggers setup/teardown hooks,
-and applies a shared and consistent environment to all child processes ensuring
-consistent and discoverable configuration.
+and applies a consistent environment to all child processes ensuring deterministic
+and repeatable configuration.
 
 
 ## Installation

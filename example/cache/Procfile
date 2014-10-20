@@ -1,0 +1,1 @@
+redis: redis-server --port $CACHE_REDIS_PORT

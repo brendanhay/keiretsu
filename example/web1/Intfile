@@ -1,3 +1,3 @@
-db: ../db
+cache: ../cache
 queue: ../queue
 web2: ../web2

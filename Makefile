@@ -2,7 +2,7 @@ SHELL := /usr/bin/env bash
 
 .PHONY: build clean lint
 
-all: deps build
+all: install build
 
 build:
 	cabal build $(addprefix -,$(findstring j,$(MAKEFLAGS)))

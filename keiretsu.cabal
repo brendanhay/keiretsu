@@ -1,11 +1,11 @@
 name:                  keiretsu
-version:               0.4.3
+version:               0.4.4
 synopsis:              Multi-process orchestration for development and integration testing
 license:               OtherLicense
 license-file:          LICENSE
 author:                Brendan Hay
 maintainer:            Brendan Hay <brendan.g.hay@gmail.com>
-copyright:             Copyright (c) 2013 Brendan Hay
+copyright:             Copyright (c) 2013-2014 Brendan Hay
 stability:             Experimental
 category:              Development, Testing
 build-type:            Simple

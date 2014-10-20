@@ -1,0 +1,3 @@
+redis: redis-server --port $WEB1_REDIS_PORT
+queue: while true; do echo "web1 enqueueing $WEB1_WEB_PORT to $QUEUE_QUEUE_PORT ..."; sleep 3; done
+web: while true; do echo "web1 peering $WEB1_WEB_PORT to $WEB2_WEB_PORT ..."; sleep 3; done

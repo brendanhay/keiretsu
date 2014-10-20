@@ -1,0 +1,1 @@
+queue: while true; do echo "saving jobs from queue $QUEUE_QUEUE_PORT to $CACHE_REDIS_PORT ..."; sleep 2; done

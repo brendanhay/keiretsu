@@ -10,7 +10,6 @@ build:
 install: cabal.sandbox.config
 	cabal install -j \
 	 --disable-documentation \
-	 --disable-library-coverage \
 	 --only-dependencies
 
 clean:

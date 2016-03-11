@@ -1,8 +1,8 @@
-{-# LANGUAGE MultiWayIf           #-}
-{-# LANGUAGE OverloadedStrings    #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE RecordWildCards      #-}
-{-# LANGUAGE TupleSections        #-}
+{-# LANGUAGE MultiWayIf        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
 
 -- Module      : Keiretsu.Process
 -- Copyright   : (c) 2013-2015 Brendan Hay <brendan.g.hay@gmail.com>
@@ -36,7 +36,7 @@ import qualified Data.Text.IO              as Text
 import           Keiretsu.Log
 import           Keiretsu.Orphans          ()
 import           Keiretsu.Types
-import           Network.Socket
+import           Network.Socket            as Socket
 import           System.Console.ANSI
 import           System.Directory
 import           System.Exit
@@ -157,7 +157,7 @@ connectToSyslog sock col out p = do
 
     open = do
         cl <- socket AF_UNIX Stream defaultProtocol
-        connect cl (SockAddrUnix syslogSock)
+        Socket.connect cl (SockAddrUnix syslogSock)
         hd <- socketToHandle cl WriteMode
         hSetBuffering hd LineBuffering
         return hd

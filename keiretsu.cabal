@@ -32,22 +32,29 @@ executable keiretsu
     hs-source-dirs:    src
     main-is:           Main.hs
 
+    other-modules:
+          Keiretsu.Config
+        , Keiretsu.Log
+        , Keiretsu.Orphans
+        , Keiretsu.Process
+        , Keiretsu.Types
+
     ghc-options:       -Wall -funbox-strict-fields -threaded -with-rtsopts=-N
 
     build-depends:
           aeson
         , async
         , ansi-terminal        >= 0.6
-        , base                 >  4.6 && < 5
+        , base                 >  4.6
         , bytestring
         , directory
         , filepath
         , hslogger
-        , conduit              == 1.1.*
+        , conduit
         , conduit-extra
         , network
-        , optparse-applicative == 0.11.*
-        , process              == 1.2.*
+        , optparse-applicative
+        , process
         , text
         , unix
         , unordered-containers

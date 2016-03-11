@@ -13,6 +13,7 @@ bin
 dist
 tmp
 vendor
+.stack-work
 
 # CTAGS
 TAGS

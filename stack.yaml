@@ -1,0 +1,6 @@
+resolver: lts-5.4
+flags: {}
+extra-package-dbs: []
+extra-deps: []
+packages:
+  - '.'

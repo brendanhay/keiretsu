@@ -18,13 +18,13 @@ module Keiretsu.Process
     ( run
     ) where
 
-import           Control.Applicative
 import           Control.Arrow
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Exception
 import           Control.Monad
 import           Data.ByteString           (ByteString)
+import qualified Data.ByteString.Char8     as C8
 import           Data.Conduit
 import qualified Data.Conduit.Binary       as Conduit
 import qualified Data.Conduit.List         as Conduit
@@ -121,7 +121,7 @@ terminate = mapM_ $ \c -> do
 
 waitProcessAsync :: Cmd -> IO (Async (Cmd, ExitCode))
 waitProcessAsync c@Cmd{..} = async $
-    waitProcess c `catch` (\e -> printError e >> throw e)
+    waitProcess c `catch` (\e -> printError e >> throwIO e)
   where
     printError :: AsyncException -> IO ()
     printError UserInterrupt = logDebugBS $ colourise cmdColour cmdPrefix "Ctrl-C"
@@ -131,7 +131,18 @@ waitProcess :: Cmd -> IO (Cmd, ExitCode)
 waitProcess p@Cmd{..} = (p,) <$>
     waitForProcess cmdHd
         `catch` catchError (ExitFailure 123)
-        `finally` cancel cmdLog
+        `finally` do
+            l <- poll cmdLog
+            case l of
+                Nothing         -> cancel cmdLog
+                Just (Left ex)  -> syslogErr ex
+                Just (Right ()) -> return ()
+  where
+    syslogErr ex
+        | Just ThreadKilled <- fromException ex = return ()
+        | otherwise = logError . C8.unpack
+                    $ colourise cmdColour cmdPrefix
+                    $ C8.pack (show ex)
 
 catchError :: a -> SomeException -> IO a
 catchError a _ = return a
@@ -144,16 +155,15 @@ connectToSyslog :: Socket
 connectToSyslog sock col out p = do
     l <- newEmptyMVar
     a <- async $ fork l
-    link a
     (a,) <$> open <* takeMVar l
   where
     fork lock = do
         s <- fst <$> accept sock <* putMVar lock ()
         Conduit.sourceSocket s
-            $= Conduit.lines
-            $= Conduit.map (colourise col p)
-            $$ Conduit.map (<> "\n")
-            =$ out
+            =$= Conduit.lines
+            =$= Conduit.map (colourise col p)
+             $$ Conduit.map (<> "\n")
+            =$= out
 
     open = do
         cl <- socket AF_UNIX Stream defaultProtocol

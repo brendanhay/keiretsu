@@ -19,7 +19,6 @@ module Keiretsu.Config
    , environment
    ) where
 
-import           Control.Applicative
 import           Control.Arrow
 import           Control.Exception     (bracket)
 import           Control.Monad
